@@ -142,9 +142,14 @@ class ChatService {
         let decryptedText = msg.text;
         try {
           decryptedText = await encryptionService.decrypt(msg.text);
+          // 如果返回的是加密文本（解密失败），检查是否是旧消息
+          if (decryptedText === msg.text && encryptionService.isEncrypted(msg.text)) {
+            console.warn('[ChatService] 返回消息解密失败，可能是密钥不匹配');
+          }
         } catch (error) {
-          console.warn('[ChatService] 解密返回消息失败，使用加密文本:', error);
-          // 如果解密失败，可能是旧消息或密钥不匹配，保留加密文本
+          // 如果解密抛出异常（不应该发生，因为 decrypt 现在会返回原文）
+          console.warn('[ChatService] 解密返回消息异常，使用原始文本:', error);
+          decryptedText = msg.text;
         }
         
         console.log(`[ChatService] 消息发送成功，消息 ID: ${Number(msg.id)}, imageId: ${imageIdValue}, 原始 imageId:`, msg.imageId);
@@ -190,10 +195,17 @@ class ChatService {
           let decryptedText = msg.text;
           try {
             decryptedText = await encryptionService.decrypt(msg.text);
+            // 如果返回的是加密文本（解密失败），检查是否是旧消息
+            if (decryptedText === msg.text && encryptionService.isEncrypted(msg.text)) {
+              // 这是加密消息但解密失败，可能是密钥不匹配
+              console.warn(`[ChatService] 消息 ${Number(msg.id)} 解密失败，可能是密钥不匹配`);
+              // 保留加密文本，UI 会显示解密错误提示
+            }
           } catch (error) {
-            // 如果解密失败，可能是旧消息或密钥不匹配
-            // 保留原始文本（可能是加密的或未加密的）
-            console.warn(`[ChatService] 消息 ${Number(msg.id)} 解密失败:`, error);
+            // 如果解密抛出异常（不应该发生，因为 decrypt 现在会返回原文）
+            // 保留原始文本
+            console.warn(`[ChatService] 消息 ${Number(msg.id)} 解密异常:`, error);
+            decryptedText = msg.text;
           }
           
           return {
@@ -229,9 +241,14 @@ class ChatService {
           let decryptedText = msg.text;
           try {
             decryptedText = await encryptionService.decrypt(msg.text);
+            // 如果返回的是加密文本（解密失败），检查是否是旧消息
+            if (decryptedText === msg.text && encryptionService.isEncrypted(msg.text)) {
+              console.warn(`[ChatService] 消息 ${Number(msg.id)} 解密失败，可能是密钥不匹配`);
+            }
           } catch (error) {
-            // 如果解密失败，可能是旧消息或密钥不匹配
-            console.warn(`[ChatService] 消息 ${Number(msg.id)} 解密失败:`, error);
+            // 如果解密抛出异常（不应该发生，因为 decrypt 现在会返回原文）
+            console.warn(`[ChatService] 消息 ${Number(msg.id)} 解密异常:`, error);
+            decryptedText = msg.text;
           }
           
           return {
@@ -267,9 +284,14 @@ class ChatService {
           let decryptedText = msg.text;
           try {
             decryptedText = await encryptionService.decrypt(msg.text);
+            // 如果返回的是加密文本（解密失败），检查是否是旧消息
+            if (decryptedText === msg.text && encryptionService.isEncrypted(msg.text)) {
+              console.warn(`[ChatService] 消息 ${Number(msg.id)} 解密失败，可能是密钥不匹配`);
+            }
           } catch (error) {
-            // 如果解密失败，可能是旧消息或密钥不匹配
-            console.warn(`[ChatService] 消息 ${Number(msg.id)} 解密失败:`, error);
+            // 如果解密抛出异常（不应该发生，因为 decrypt 现在会返回原文）
+            console.warn(`[ChatService] 消息 ${Number(msg.id)} 解密异常:`, error);
+            decryptedText = msg.text;
           }
           
           return {

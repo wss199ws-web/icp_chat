@@ -28,13 +28,16 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // 检查加密功能可用性
+  // 检查加密功能可用性（仅在非本地环境显示警告）
   useEffect(() => {
     const available = encryptionService.isAvailable();
     setEncryptionAvailable(available);
-    if (!available) {
-      const reason = encryptionService.getUnavailableReason();
+    const reason = encryptionService.getUnavailableReason();
+    // 只在非本地环境且不可用时显示警告
+    if (!available && reason) {
       console.warn('[App] 加密功能不可用:', reason);
+    } else if (!available) {
+      console.log('[App] 本地开发环境，端到端加密已禁用');
     }
   }, []);
 
@@ -179,9 +182,9 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {!encryptionAvailable && (
+        {!encryptionAvailable && encryptionService.getUnavailableReason() && (
           <div className="warning-message">
-            <span>⚠️ {encryptionService.getUnavailableReason() || '加密功能不可用'}</span>
+            <span>⚠️ {encryptionService.getUnavailableReason()}</span>
           </div>
         )}
 

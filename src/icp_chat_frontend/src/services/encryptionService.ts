@@ -1,13 +1,29 @@
 /**
  * 端到端加密服务
  * 使用 Web Crypto API 实现 AES-GCM 加密
+ * 注意：在本地开发环境（DFX_NETWORK=local）下禁用加密
  */
+
+import { config } from '../config';
 
 const STORAGE_KEY = 'icp_chat_encryption_key';
 const KEY_ALGORITHM = 'AES-GCM';
 const KEY_LENGTH = 256; // 256位密钥
 const IV_LENGTH = 12; // 96位初始化向量（GCM推荐）
 const TAG_LENGTH = 128; // 128位认证标签
+
+/**
+ * 检查是否应该启用加密
+ * 本地开发环境禁用加密
+ */
+function shouldEnableEncryption(): boolean {
+  const network = config.network;
+  const enabled = network !== 'local';
+  if (!enabled) {
+    console.log('[EncryptionService] 本地开发环境，禁用端到端加密');
+  }
+  return enabled;
+}
 
 export interface EncryptionResult {
   encrypted: string; // Base64编码的加密数据
@@ -169,6 +185,12 @@ class EncryptionService {
    */
   async encrypt(text: string): Promise<string> {
     try {
+      // 本地开发环境不加密，直接返回原文
+      if (!shouldEnableEncryption()) {
+        console.log('[EncryptionService] 本地环境，跳过加密');
+        return text;
+      }
+
       // 检查 Web Crypto API 是否可用
       if (!this.checkCryptoAvailable()) {
         const protocol = typeof window !== 'undefined' ? window.location.protocol : 'unknown';
@@ -233,7 +255,19 @@ class EncryptionService {
         return encryptedText;
       }
 
-      // 检查 Web Crypto API 是否可用
+      // 本地开发环境：如果消息是加密的，尝试解密（可能是从生产环境来的数据）
+      if (!shouldEnableEncryption()) {
+        console.log('[EncryptionService] 本地环境，尝试解密（可能是生产环境数据）');
+        // 在本地环境下，如果 Web Crypto API 可用，尝试解密
+        // 如果不可用或解密失败，返回提示信息
+        if (!this.checkCryptoAvailable() || !crypto.subtle) {
+          console.warn('[EncryptionService] 本地环境 Web Crypto API 不可用，无法解密加密消息');
+          return '[加密消息 - 本地环境无法解密]';
+        }
+        // 继续执行解密流程（下面会处理）
+      }
+
+      // 检查 Web Crypto API 是否可用（生产环境需要）
       if (!this.checkCryptoAvailable()) {
         const protocol = typeof window !== 'undefined' ? window.location.protocol : 'unknown';
         const hostname = typeof window !== 'undefined' ? window.location.hostname : 'unknown';
@@ -289,24 +323,34 @@ class EncryptionService {
       }
       
       // 解密
-      const decrypted = await crypto.subtle.decrypt(
-        {
-          name: KEY_ALGORITHM,
-          iv: iv,
-          tagLength: TAG_LENGTH,
-        },
-        key,
-        encrypted
-      );
+      let decrypted: ArrayBuffer;
+      try {
+        decrypted = await crypto.subtle.decrypt(
+          {
+            name: KEY_ALGORITHM,
+            iv: iv,
+            tagLength: TAG_LENGTH,
+          },
+          key,
+          encrypted
+        );
+      } catch (decryptError) {
+        // 解密操作失败（可能是密钥不匹配、数据损坏等）
+        console.error('[EncryptionService] 解密操作失败:', decryptError);
+        // 返回原始加密文本，让调用者决定如何处理
+        return encryptedText;
+      }
 
       // 转换为文本
       const decoder = new TextDecoder();
       return decoder.decode(decrypted);
     } catch (error) {
-      console.error('[EncryptionService] 解密失败:', error);
-      // 如果解密失败，可能是密钥不匹配或消息损坏
+      console.error('[EncryptionService] 解密过程出错:', error);
+      // 如果解密失败，返回原始文本（可能是未加密的旧消息）
+      // 这样不会影响消息显示
       const errorMessage = error instanceof Error ? error.message : '未知错误';
-      throw new Error(`消息解密失败: ${errorMessage}`);
+      console.warn(`[EncryptionService] 解密失败，返回原始文本: ${errorMessage}`);
+      return encryptedText;
     }
   }
 
@@ -321,6 +365,10 @@ class EncryptionService {
    * 检查加密功能是否可用（公共方法）
    */
   isAvailable(): boolean {
+    // 本地环境禁用加密
+    if (!shouldEnableEncryption()) {
+      return false;
+    }
     return this.checkCryptoAvailable();
   }
 
@@ -328,6 +376,11 @@ class EncryptionService {
    * 获取加密不可用的原因（用于显示给用户）
    */
   getUnavailableReason(): string | null {
+    // 本地环境禁用加密是预期行为，不显示警告
+    if (!shouldEnableEncryption()) {
+      return null;
+    }
+
     if (this.checkCryptoAvailable()) {
       return null;
     }
