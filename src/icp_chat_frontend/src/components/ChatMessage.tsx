@@ -9,6 +9,33 @@ export interface ChatMessageProps {
   isOwn?: boolean;
 }
 
+// 根据用户名生成头像颜色
+const getAvatarColor = (name: string): string => {
+  const colors = [
+    '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
+    '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B739', '#52BE80',
+    '#EC7063', '#5DADE2', '#58D68D', '#F4D03F', '#AF7AC5',
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+};
+
+// 获取头像文字（首字母或前两个字符）
+const getAvatarText = (name: string): string => {
+  if (name === '匿名' || !name) {
+    return '匿';
+  }
+  // 如果是中文，取第一个字符；如果是英文，取首字母大写
+  const firstChar = name.charAt(0);
+  if (/[\u4e00-\u9fa5]/.test(firstChar)) {
+    return firstChar;
+  }
+  return firstChar.toUpperCase();
+};
+
 const ChatMessage: React.FC<ChatMessageProps> = ({ author, text, timestamp, isOwn = false }) => {
   const formatTime = (timestamp: bigint): string => {
     const date = new Date(Number(timestamp) / 1_000_000); // 转换为毫秒
@@ -41,15 +68,23 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ author, text, timestamp, isOw
     });
   };
 
+  const avatarColor = getAvatarColor(author);
+  const avatarText = getAvatarText(author);
+
   return (
     <div className={`chat-message ${isOwn ? 'own' : ''}`}>
-      <div className="message-header">
-        <span className="message-author">{author === '匿名' ? '匿名用户' : author}</span>
-        <span className="message-time" title={formatFullTime(timestamp)}>
-          {formatTime(timestamp)}
-        </span>
+      <div className="message-avatar" style={{ backgroundColor: avatarColor }}>
+        {avatarText}
       </div>
-      <div className="message-content">{text}</div>
+      <div className="message-body">
+        <div className="message-header">
+          <span className="message-author">{author === '匿名' ? '匿名用户' : author}</span>
+          <span className="message-time" title={formatFullTime(timestamp)}>
+            {formatTime(timestamp)}
+          </span>
+        </div>
+        <div className="message-content">{text}</div>
+      </div>
     </div>
   );
 };
