@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { chatService, Message } from './services/chatService';
 import MessageList from './components/MessageList';
 import MessageInput from './components/MessageInput';
@@ -11,7 +11,20 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [messageCount, setMessageCount] = useState(0);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
-  const [refreshInterval, setRefreshInterval] = useState<NodeJS.Timeout | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(true); // 自动刷新开关
+  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 加载消息
+  const loadMessages = useCallback(async () => {
+    try {
+      const newMessages = await chatService.getLastMessages(50);
+      setMessages(newMessages);
+      const count = await chatService.getMessageCount();
+      setMessageCount(count);
+    } catch (err) {
+      console.error('加载消息失败:', err);
+    }
+  }, []);
 
   // 初始化服务
   useEffect(() => {
@@ -19,11 +32,6 @@ const App: React.FC = () => {
       try {
         await chatService.initialize();
         await loadMessages();
-        // 设置定时刷新（每5秒）
-        const interval = setInterval(() => {
-          loadMessages();
-        }, 5000);
-        setRefreshInterval(interval);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : '未知错误';
         let userMessage = '初始化失败，请检查网络连接';
@@ -44,23 +52,36 @@ const App: React.FC = () => {
     init();
 
     return () => {
-      if (refreshInterval) {
-        clearInterval(refreshInterval);
+      // 清理定时器
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+        refreshIntervalRef.current = null;
       }
     };
-  }, []);
+  }, [loadMessages]);
 
-  // 加载消息
-  const loadMessages = useCallback(async () => {
-    try {
-      const newMessages = await chatService.getLastMessages(50);
-      setMessages(newMessages);
-      const count = await chatService.getMessageCount();
-      setMessageCount(count);
-    } catch (err) {
-      console.error('加载消息失败:', err);
+  // 自动刷新逻辑
+  useEffect(() => {
+    // 先清理旧的定时器
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current);
+      refreshIntervalRef.current = null;
     }
-  }, []);
+
+    // 如果开启自动刷新，设置定时器（每10秒刷新一次，降低频率）
+    if (autoRefresh && !loading) {
+      refreshIntervalRef.current = setInterval(() => {
+        loadMessages();
+      }, 10000); // 改为每10秒刷新一次
+    }
+
+    return () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+        refreshIntervalRef.current = null;
+      }
+    };
+  }, [autoRefresh, loadMessages, loading]);
 
   // 发送消息
   const handleSendMessage = async (text: string) => {
@@ -125,7 +146,15 @@ const App: React.FC = () => {
             <span className="message-count">共 {messageCount} 条消息</span>
           </div>
           <div className="header-right">
-            <button className="refresh-button" onClick={loadMessages} title="刷新消息">
+            <label className="auto-refresh-toggle" title="自动刷新">
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+              />
+              <span>自动刷新</span>
+            </label>
+            <button className="refresh-button" onClick={loadMessages} title="手动刷新消息">
               🔄
             </button>
             <button className="clear-button" onClick={handleClearMessages} title="清空消息">
