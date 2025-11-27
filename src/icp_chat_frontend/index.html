@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ICP Chat - 聊天应用</title>
+    <script>
+      // 为浏览器环境提供 global polyfill（解决 @dfinity/agent 的兼容性问题）
+      if (typeof global === 'undefined') {
+        var global = globalThis;
+      }
+      
+      // 从 DFX 生成的环境变量中加载配置
+      // 这些变量会在部署时由 DFX 注入
+      (function() {
+        const env = {
+          DFX_NETWORK: 'local',
+          CANISTER_ID_ICP_CHAT_BACKEND: ''
+        };
+        
+        // 尝试从 Vite 注入的环境变量获取
+        if (typeof import !== 'undefined' && import.meta?.env) {
+          if (import.meta.env.DFX_NETWORK) {
+            env.DFX_NETWORK = import.meta.env.DFX_NETWORK;
+          }
+          if (import.meta.env.CANISTER_ID_ICP_CHAT_BACKEND) {
+            env.CANISTER_ID_ICP_CHAT_BACKEND = import.meta.env.CANISTER_ID_ICP_CHAT_BACKEND;
+          }
+        }
+        
+        // 尝试从全局变量获取（DFX 可能注入）
+        if (typeof window !== 'undefined') {
+          if (window.process?.env) {
+            Object.assign(env, window.process.env);
+          }
+          // 存储到 window 对象供应用使用
+          window.__ICP_ENV__ = env;
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
