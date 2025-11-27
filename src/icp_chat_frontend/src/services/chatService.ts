@@ -18,8 +18,20 @@ export interface MessagePage {
   totalPages: number;
 }
 
+interface CachedMessages {
+  messages: Message[];
+  timestamp: number;
+  messageCount: number;
+}
+
 class ChatService {
   private actor: _SERVICE | null = null;
+  
+  // 消息缓存
+  private messagesCache: CachedMessages | null = null;
+  
+  // 缓存过期时间（10秒，因为聊天消息需要实时性）
+  private readonly CACHE_EXPIRY = 10 * 1000;
 
   async initialize(useAuth: boolean = false) {
     try {
@@ -134,6 +146,8 @@ class ChatService {
       console.log(`[ChatService] 发送消息，text: "${textPreview}", imageId: ${imageId}, imageIdOpt:`, imageIdOpt);
       const result = await this.actor!.sendMessage(encryptedText, imageIdOpt);
       if ('ok' in result) {
+        // 清除消息缓存，因为发送了新消息
+        this.clearMessagesCache();
         const msg = result.ok;
         // imageId 是 Opt<Nat>，在 JavaScript 中表示为 [] 或 [bigint]
         const imageIdValue = Array.isArray(msg.imageId) && msg.imageId.length > 0 ? Number(msg.imageId[0]) : null;
@@ -178,12 +192,35 @@ class ChatService {
     }
   }
 
-  async getLastMessages(n: number = 50): Promise<Message[]> {
+  /**
+   * 检查消息缓存是否有效
+   */
+  private isMessagesCacheValid(): boolean {
+    if (!this.messagesCache) return false;
+    const now = Date.now();
+    return (now - this.messagesCache.timestamp) < this.CACHE_EXPIRY;
+  }
+
+  /**
+   * 清除消息缓存（发送新消息后调用）
+   */
+  clearMessagesCache(): void {
+    this.messagesCache = null;
+  }
+
+  async getLastMessages(n: number = 50, forceRefresh: boolean = false): Promise<Message[]> {
     if (!this.actor) {
       await this.initialize();
     }
 
+    // 检查缓存
+    if (!forceRefresh && this.isMessagesCacheValid() && this.messagesCache) {
+      console.log('[ChatService] 从缓存获取消息');
+      return this.messagesCache.messages;
+    }
+
     try {
+      console.log('[ChatService] 从服务器获取消息');
       const messages = await this.actor!.getLastMessages(BigInt(n));
       // 并行解密所有消息
       const decryptedMessages = await Promise.all(
@@ -217,9 +254,22 @@ class ChatService {
           };
         })
       );
+      
+      // 更新缓存
+      this.messagesCache = {
+        messages: decryptedMessages,
+        timestamp: Date.now(),
+        messageCount: decryptedMessages.length,
+      };
+      
       return decryptedMessages;
     } catch (error) {
       console.error('获取消息失败:', error);
+      // 如果出错，尝试返回缓存数据
+      if (this.messagesCache) {
+        console.log('[ChatService] 使用缓存数据作为降级方案');
+        return this.messagesCache.messages;
+      }
       return [];
     }
   }
@@ -323,16 +373,32 @@ class ChatService {
     }
   }
 
-  async getMessageCount(): Promise<number> {
+  async getMessageCount(forceRefresh: boolean = false): Promise<number> {
+    // 如果缓存有效，使用缓存中的消息数量
+    if (!forceRefresh && this.isMessagesCacheValid() && this.messagesCache) {
+      return this.messagesCache.messageCount;
+    }
+
     if (!this.actor) {
       await this.initialize();
     }
 
     try {
       const count = await this.actor!.getMessageCount();
-      return Number(count);
+      const messageCount = Number(count);
+      
+      // 更新缓存中的消息数量
+      if (this.messagesCache) {
+        this.messagesCache.messageCount = messageCount;
+      }
+      
+      return messageCount;
     } catch (error) {
       console.error('获取消息数量失败:', error);
+      // 如果出错，尝试返回缓存中的数量
+      if (this.messagesCache) {
+        return this.messagesCache.messageCount;
+      }
       return 0;
     }
   }
