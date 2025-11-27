@@ -7,6 +7,7 @@
 import { config } from '../config';
 
 const STORAGE_KEY = 'icp_chat_encryption_key';
+const ENCRYPTION_ENABLED_KEY = 'icp_chat_encryption_enabled'; // 加密开关状态
 const KEY_ALGORITHM = 'AES-GCM';
 const KEY_LENGTH = 256; // 256位密钥
 const IV_LENGTH = 12; // 96位初始化向量（GCM推荐）
@@ -14,15 +15,27 @@ const TAG_LENGTH = 128; // 128位认证标签
 
 /**
  * 检查是否应该启用加密
- * 本地开发环境禁用加密
+ * 1. 本地开发环境默认禁用
+ * 2. 用户可以通过开关控制
  */
 function shouldEnableEncryption(): boolean {
   const network = config.network;
-  const enabled = network !== 'local';
-  if (!enabled) {
-    console.log('[EncryptionService] 本地开发环境，禁用端到端加密');
+  
+  // 本地开发环境默认禁用
+  if (network === 'local') {
+    return false;
   }
-  return enabled;
+  
+  // 检查用户是否手动开启了加密
+  if (typeof window !== 'undefined') {
+    const enabled = localStorage.getItem(ENCRYPTION_ENABLED_KEY);
+    if (enabled !== null) {
+      return enabled === 'true';
+    }
+  }
+  
+  // 默认不开启（生产环境也需要用户手动开启）
+  return false;
 }
 
 export interface EncryptionResult {
@@ -446,14 +459,48 @@ class EncryptionService {
   }
 
   /**
+   * 检查 Web Crypto API 是否可用（公共方法）
+   */
+  canUseCrypto(): boolean {
+    return this.checkCryptoAvailable();
+  }
+
+  /**
    * 检查加密功能是否可用（公共方法）
    */
   isAvailable(): boolean {
-    // 本地环境禁用加密
+    // 如果用户未开启加密，返回 false
     if (!shouldEnableEncryption()) {
       return false;
     }
     return this.checkCryptoAvailable();
+  }
+
+  /**
+   * 检查用户是否开启了加密功能
+   */
+  isEncryptionEnabled(): boolean {
+    return shouldEnableEncryption();
+  }
+
+  /**
+   * 开启加密功能
+   */
+  enableEncryption(): void {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(ENCRYPTION_ENABLED_KEY, 'true');
+      console.log('[EncryptionService] 端到端加密已开启');
+    }
+  }
+
+  /**
+   * 关闭加密功能
+   */
+  disableEncryption(): void {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(ENCRYPTION_ENABLED_KEY, 'false');
+      console.log('[EncryptionService] 端到端加密已关闭');
+    }
   }
 
   /**

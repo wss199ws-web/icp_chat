@@ -30,16 +30,22 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // 检查加密功能可用性（仅在非本地环境显示警告）
+  // 检查加密功能可用性
   useEffect(() => {
-    const available = encryptionService.isAvailable();
-    setEncryptionAvailable(available);
+    // 检查 Web Crypto API 是否可用
+    const cryptoAvailable = encryptionService.canUseCrypto?.() || false;
+    // 检查用户是否开启了加密
+    const encryptionEnabled = encryptionService.isEncryptionEnabled();
+    // 只有两者都满足时才认为加密可用
+    setEncryptionAvailable(cryptoAvailable && encryptionEnabled);
+    
     const reason = encryptionService.getUnavailableReason();
-    // 只在非本地环境且不可用时显示警告
-    if (!available && reason) {
-      console.warn('[App] 加密功能不可用:', reason);
-    } else if (!available) {
-      console.log('[App] 本地开发环境，端到端加密已禁用');
+    if (!cryptoAvailable && reason) {
+      console.warn('[App] Web Crypto API 不可用:', reason);
+    } else if (!encryptionEnabled) {
+      console.log('[App] 端到端加密未开启（默认关闭）');
+    } else {
+      console.log('[App] 端到端加密已开启');
     }
   }, []);
 
@@ -161,11 +167,27 @@ const App: React.FC = () => {
           <div className="header-left">
             <h1>💬 ICP Chat</h1>
             <span className="message-count">共 {messageCount} 条消息</span>
-            {encryptionAvailable && (
-              <>
-                <span className="encryption-badge" title="消息采用端到端加密，只有您能解密">
-                  🔒 端到端加密
+            <div className="encryption-controls">
+              <label className="encryption-toggle" title="开启/关闭端到端加密">
+                <input
+                  type="checkbox"
+                  checked={encryptionAvailable && encryptionService.isEncryptionEnabled()}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      encryptionService.enableEncryption();
+                      setEncryptionAvailable(encryptionService.isAvailable());
+                    } else {
+                      encryptionService.disableEncryption();
+                      setEncryptionAvailable(false);
+                    }
+                  }}
+                  disabled={!encryptionService.canUseCrypto?.()}
+                />
+                <span className="encryption-label">
+                  {encryptionAvailable && encryptionService.isEncryptionEnabled() ? '🔒 端到端加密' : '🔓 未加密'}
                 </span>
+              </label>
+              {encryptionAvailable && encryptionService.isEncryptionEnabled() && (
                 <button
                   className="key-management-btn"
                   onClick={() => setShowKeyManagement(true)}
@@ -173,8 +195,8 @@ const App: React.FC = () => {
                 >
                   🔑 密钥管理
                 </button>
-              </>
-            )}
+              )}
+            </div>
           </div>
           <div className="header-right">
             <label className="auto-refresh-toggle" title="自动刷新">

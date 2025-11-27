@@ -71,10 +71,18 @@ const KeyManagement: React.FC<KeyManagementProps> = ({ onClose }) => {
       if (result.success) {
         setSyncStatus('✅ 密钥已成功同步到服务器！');
       } else {
-        setSyncStatus(`❌ 同步失败: ${result.error || '未知错误'}`);
+        // 显示友好的错误消息
+        const errorMsg = result.error || '未知错误';
+        setSyncStatus(`❌ ${errorMsg}`);
       }
     } catch (error) {
-      setSyncStatus(`❌ 同步异常: ${error instanceof Error ? error.message : '未知错误'}`);
+      // 捕获所有错误，包括 TypeError
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      if (errorMsg.includes('is not a function')) {
+        setSyncStatus('❌ 密钥同步功能需要重新部署后端。请运行: dfx deploy icp_chat_backend');
+      } else {
+        setSyncStatus(`❌ 同步异常: ${errorMsg}`);
+      }
     } finally {
       setLoading(false);
     }

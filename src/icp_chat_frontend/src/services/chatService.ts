@@ -361,6 +361,14 @@ class ChatService {
     }
 
     try {
+      // 检查方法是否存在
+      if (typeof this.actor!.saveEncryptionKey !== 'function') {
+        return {
+          success: false,
+          error: '密钥同步功能需要重新部署后端。请运行: dfx deploy icp_chat_backend',
+        };
+      }
+
       const keyBase64 = await encryptionService.exportKeyString();
       const result = await this.actor!.saveEncryptionKey(keyBase64);
       if ('ok' in result) {
@@ -372,6 +380,13 @@ class ChatService {
       }
     } catch (error) {
       console.error('[ChatService] 密钥同步异常:', error);
+      // 检查是否是方法不存在的错误
+      if (error instanceof TypeError && error.message.includes('is not a function')) {
+        return {
+          success: false,
+          error: '密钥同步功能需要重新部署后端。请运行: dfx deploy icp_chat_backend',
+        };
+      }
       return {
         success: false,
         error: error instanceof Error ? error.message : '密钥同步失败',
@@ -388,6 +403,14 @@ class ChatService {
     }
 
     try {
+      // 检查方法是否存在
+      if (typeof this.actor!.getEncryptionKey !== 'function') {
+        return {
+          success: false,
+          error: '密钥同步功能需要重新部署后端。请运行: dfx deploy icp_chat_backend',
+        };
+      }
+
       const result = await this.actor!.getEncryptionKey();
       if (result && result.length > 0) {
         const keyBase64 = result[0];
@@ -436,6 +459,14 @@ class ChatService {
     }
 
     try {
+      // 检查方法是否存在
+      if (typeof this.actor!.deleteEncryptionKey !== 'function') {
+        return {
+          success: false,
+          error: '密钥同步功能需要重新部署后端。请运行: dfx deploy icp_chat_backend',
+        };
+      }
+
       const result = await this.actor!.deleteEncryptionKey();
       if (result) {
         console.log('[ChatService] 服务器密钥删除成功');
@@ -463,6 +494,14 @@ class ChatService {
     }
 
     try {
+      // 检查方法是否存在
+      if (typeof this.actor!.setGroupKey !== 'function') {
+        return {
+          success: false,
+          error: '群组密钥功能需要重新部署后端。请运行: dfx deploy icp_chat_backend',
+        };
+      }
+
       const result = await this.actor!.setGroupKey(groupId, keyBase64);
       if ('ok' in result) {
         // 同时保存到本地缓存
@@ -491,6 +530,14 @@ class ChatService {
     }
 
     try {
+      // 检查方法是否存在
+      if (typeof this.actor!.getGroupKey !== 'function') {
+        return {
+          success: false,
+          error: '群组密钥功能需要重新部署后端。请运行: dfx deploy icp_chat_backend',
+        };
+      }
+
       const result = await this.actor!.getGroupKey(groupId);
       if (result && result.length > 0) {
         const keyBase64 = result[0];
@@ -520,6 +567,14 @@ class ChatService {
     }
 
     try {
+      // 检查方法是否存在
+      if (typeof this.actor!.deleteGroupKey !== 'function') {
+        return {
+          success: false,
+          error: '群组密钥功能需要重新部署后端。请运行: dfx deploy icp_chat_backend',
+        };
+      }
+
       const result = await this.actor!.deleteGroupKey(groupId);
       if (result) {
         console.log(`[ChatService] 群组 ${groupId} 密钥删除成功`);
