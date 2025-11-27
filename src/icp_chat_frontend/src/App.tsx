@@ -84,12 +84,12 @@ const App: React.FC = () => {
   }, [autoRefresh, loadMessages, loading]);
 
   // 发送消息
-  const handleSendMessage = async (text: string, imageId?: number | null) => {
+  const handleSendMessage = async (text: string) => {
     setSending(true);
     setError(null);
 
     try {
-      const result = await chatService.sendMessage(text, imageId);
+      const result = await chatService.sendMessage(text);
       if (result.success && result.message) {
         // 添加新消息到列表
         setMessages((prev) => [...prev, result.message!]);

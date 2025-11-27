@@ -81,48 +81,6 @@
   font-size: 14px;
 }
 
-.message-text {
-  margin-bottom: 8px;
-}
-
-.message-image {
-  margin-top: 8px;
-  border-radius: 8px;
-  overflow: hidden;
-  max-width: 100%;
-  background: #f5f5f5;
-}
-
-.message-image img {
-  width: 100%;
-  height: auto;
-  max-width: 400px;
-  display: block;
-  cursor: pointer;
-  transition: transform 0.2s;
-}
-
-.message-image img:hover {
-  transform: scale(1.02);
-}
-
-.image-loading,
-.image-error {
-  padding: 20px;
-  text-align: center;
-  color: #999;
-  font-size: 12px;
-}
-
-.chat-message.own .message-image {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.chat-message.own .image-loading,
-.chat-message.own .image-error {
-  color: rgba(255, 255, 255, 0.8);
-}
-
 @keyframes slideIn {
   from {
     opacity: 0;
