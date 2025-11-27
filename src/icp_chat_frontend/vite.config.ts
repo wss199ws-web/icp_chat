@@ -9,6 +9,27 @@ const __dirname = dirname(__filename)
 
 // 读取 DFX 生成的 .env 文件
 function loadDfxEnv() {
+  const env: Record<string, string> = {}
+
+  // 优先尝试读取本地 canister ID（开发模式）
+  try {
+    const localCanisterIdsPath = resolve(__dirname, '../../.dfx/local/canister_ids.json')
+    const localCanisterIdsContent = readFileSync(localCanisterIdsPath, 'utf-8')
+    const localCanisterIds = JSON.parse(localCanisterIdsContent)
+    
+    if (process.env.DFX_NETWORK === 'local') {
+      env.CANISTER_ID_ICP_CHAT_BACKEND = localCanisterIds.icp_chat_backend.local
+      env.DFX_NETWORK = 'local'
+      console.log('[Vite Config] 从本地 canister_ids.json 加载配置（开发模式）:', {
+        network: env.DFX_NETWORK,
+        canisterId: env.CANISTER_ID_ICP_CHAT_BACKEND,
+      })
+      return env
+    }
+  } catch (error) {
+    // 本地 canister_ids.json 不存在，继续尝试其他方式
+    console.log('[Vite Config] 未找到本地 canister_ids.json，尝试其他方式')
+  }
   try {
     const envPath = resolve(__dirname, '../../.env')
     const envContent = readFileSync(envPath, 'utf-8')
@@ -56,18 +77,36 @@ function loadDfxEnv() {
       const canisterIdsContent = readFileSync(canisterIdsPath, 'utf-8')
       const canisterIds = JSON.parse(canisterIdsContent)
       
-      const env: Record<string, string> = {}
+
+      // 如果 .env 中的网络是主网，但在开发模式下，尝试使用本地配置
+    if (process.env.DFX_NETWORK === 'local') {
+      console.log('[Vite Config] .env 中配置为主网，尝试查找本地配置')
+      // 尝试读取本地 canister IDs
+      try {
+        const localCanisterIdsPath = resolve(__dirname, '../../.dfx/local/canister_ids.json')
+        const localCanisterIdsContent = readFileSync(localCanisterIdsPath, 'utf-8')
+        const localCanisterIds = JSON.parse(localCanisterIdsContent)
+        
+        if (localCanisterIds.icp_chat_backend?.local) {
+          env.CANISTER_ID_ICP_CHAT_BACKEND = localCanisterIds.icp_chat_backend.local
+          env.DFX_NETWORK = 'local'
+          console.log('[Vite Config] 找到本地 canister ID，切换到本地模式:', localCanisterIds.icp_chat_backend.local)
+        }
+      } catch (e) {
+        // 如果无法读取本地配置，继续使用 .env 中的配置
+        console.log('[Vite Config] 未找到本地 canister ID，使用 .env 中的主网配置')
+      }
+    }
       
       // 从 canister_ids.json 读取后端 canister ID
-      if (canisterIds.icp_chat_backend?.ic) {
-        env.CANISTER_ID_ICP_CHAT_BACKEND = canisterIds.icp_chat_backend.ic
-        // 如果存在主网 ID，说明是主网部署
+      if (process.env.DFX_NETWORK === 'local') {
+        env.CANISTER_ID_ICP_CHAT_BACKEND = canisterIds.icp_chat_backend?.local
+        env.DFX_NETWORK = 'local'
+      } else if (process.env.DFX_NETWORK === 'ic') {
+        env.CANISTER_ID_ICP_CHAT_BACKEND = canisterIds.icp_chat_backend?.ic
         env.DFX_NETWORK = 'ic'
-        console.log('[Vite Config] 从 canister_ids.json 加载配置:', {
-          network: env.DFX_NETWORK,
-          canisterId: env.CANISTER_ID_ICP_CHAT_BACKEND,
-        })
       }
+      
       
       return env
     } catch (jsonError) {
@@ -98,12 +137,16 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     envPrefix: 'VITE_',
+    root: __dirname,
     build: {
       outDir: 'dist',
       assetsDir: 'assets',
+      rollupOptions: {
+        input: resolve(__dirname, 'index.html'),
+      },
     },
     server: {
-      port: 8080,
+      port: 3001,
       allowedHosts: ['local.bilibili.co', '127.0.0.1', '0.0.0.0'],
       host: '0.0.0.0',
       proxy: {

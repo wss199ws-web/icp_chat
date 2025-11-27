@@ -39,7 +39,9 @@ class ChatService {
     }
 
     try {
-      const result = await this.actor!.sendMessage(text);
+      // ICP 中 Opt<T> 类型在 JavaScript 中表示为数组：[] 表示 null，[value] 表示 some(value)
+      const imageIdOpt: [] | [bigint] = [];
+      const result = await this.actor!.sendMessage(text, imageIdOpt);
       if ('ok' in result) {
         const msg = result.ok;
         return {
