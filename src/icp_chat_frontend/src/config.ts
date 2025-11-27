@@ -57,42 +57,17 @@ function detectNetwork(): string {
     // 这里也不直接返回，继续检查
   }
   
-  // 优先级 4: localhost 或 127.0.0.1 且端口是 4943，明确是本地网络
-  if ((hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0') && port === '4943') {
-    console.log('[Config] 检测到本地网络:', { hostname, port });
-    return 'local';
-  }
-  
-  // 优先级 5: 如果通过 localhost 访问，检查构建时环境变量
-  // 如果构建时环境变量是 'ic'，说明是主网部署（通过 DFX 代理访问）
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    // 优先检查构建时注入的环境变量（最可靠）
-    if (typeof import.meta !== 'undefined') {
-      const env = import.meta.env as Record<string, string>;
-      const network = env.VITE_DFX_NETWORK;
-      if (network === 'ic') {
-        console.log('[Config] 通过构建时环境变量检测到主网（通过 localhost 代理访问主网）');
-        return 'ic';
-      }
+  // 优先级 4: localhost 或 127.0.0.1 访问，强制使用本地网络
+  // 本地开发服务器端口通常是 8080，DFX 代理端口是 4943
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0') {
+    // 如果是开发服务器（8080）或 DFX 代理（4943），强制使用本地网络
+    if (port === '8080' || port === '4943' || !port) {
+      console.log('[Config] 检测到本地开发环境，强制使用本地网络:', { hostname, port });
+      return 'local';
     }
     
-    // 检查 window.__ICP_ENV__（HTML 中注入的）
-    if (typeof window !== 'undefined' && window.__ICP_ENV__?.DFX_NETWORK === 'ic') {
-      console.log('[Config] 通过 window.__ICP_ENV__ 检测到主网');
-      return 'ic';
-    }
-    
-    // 检查是否有主网的 canister ID（如果有主网 canister ID，说明是主网部署）
-    const canisterId = config.canisterId;
-    if (canisterId && canisterId.length > 0) {
-      // 主网 canister ID 通常以特定前缀开头，但更可靠的方式是检查环境变量
-      // 这里我们主要依赖环境变量，但如果环境变量不可用，至少确保有 canister ID
-      console.log('[Config] localhost 访问，但检测到 canister ID，使用本地网络（DFX 代理）');
-    } else {
-      console.log('[Config] localhost 访问，未检测到 canister ID，使用本地网络');
-    }
-    
-    // 默认 localhost 是本地网络
+    // 其他端口的 localhost 访问，也默认使用本地网络
+    console.log('[Config] localhost 访问，使用本地网络:', { hostname, port });
     return 'local';
   }
   
@@ -214,18 +189,12 @@ export const config = {
     const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
     
     // 主网使用 icp-api.io，本地使用 localhost:4943
-    // 特殊情况：如果通过 localhost 访问但 network 是 'ic'，说明是通过 DFX 代理访问主网
-    // 这种情况下应该使用 localhost:4943（DFX 代理会转发到主网）
     let host: string;
     if (network === 'ic') {
-      // 如果直接访问主网域名，使用主网 API
-      if (hostname.includes('.ic0.app') || hostname.includes('.icp0.io')) {
-        host = 'https://icp-api.io';
-      } else {
-        // 通过 localhost 代理访问主网，使用 localhost:4943
-        host = 'http://localhost:4943';
-      }
+      // 主网：使用主网 API
+      host = 'https://icp-api.io';
     } else {
+      // 本地网络：使用本地 DFX 代理
       host = 'http://localhost:4943';
     }
     
