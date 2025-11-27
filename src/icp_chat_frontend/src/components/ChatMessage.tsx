@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import './ChatMessage.css';
 
 export interface ChatMessageProps {
@@ -8,6 +8,46 @@ export interface ChatMessageProps {
   timestamp: bigint;
   isOwn?: boolean;
 }
+
+// 解析消息内容，提取文本和图片
+interface ParsedContent {
+  parts: Array<{ type: 'text' | 'image'; content: string }>;
+}
+
+const parseMessage = (text: string): ParsedContent => {
+  const parts: Array<{ type: 'text' | 'image'; content: string }> = [];
+  const imagePattern = /\[图片\](data:image\/[^;]+;base64,[^\s]+)/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = imagePattern.exec(text)) !== null) {
+    // 添加图片前的文本
+    if (match.index > lastIndex) {
+      const textPart = text.substring(lastIndex, match.index);
+      if (textPart.trim()) {
+        parts.push({ type: 'text', content: textPart });
+      }
+    }
+    // 添加图片
+    parts.push({ type: 'image', content: match[1] });
+    lastIndex = imagePattern.lastIndex;
+  }
+
+  // 添加剩余的文本
+  if (lastIndex < text.length) {
+    const remainingText = text.substring(lastIndex);
+    if (remainingText.trim()) {
+      parts.push({ type: 'text', content: remainingText });
+    }
+  }
+
+  // 如果没有匹配到图片，整个消息都是文本
+  if (parts.length === 0) {
+    parts.push({ type: 'text', content: text });
+  }
+
+  return { parts };
+};
 
 // 根据用户名生成头像颜色
 const getAvatarColor = (name: string): string => {
@@ -37,6 +77,8 @@ const getAvatarText = (name: string): string => {
 };
 
 const ChatMessage: React.FC<ChatMessageProps> = ({ author, text, timestamp, isOwn = false }) => {
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
+
   const formatTime = (timestamp: bigint): string => {
     const date = new Date(Number(timestamp) / 1_000_000); // 转换为毫秒
     const now = new Date();
@@ -70,22 +112,58 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ author, text, timestamp, isOw
 
   const avatarColor = getAvatarColor(author);
   const avatarText = getAvatarText(author);
+  const parsedContent = parseMessage(text);
 
   return (
-    <div className={`chat-message ${isOwn ? 'own' : ''}`}>
-      <div className="message-avatar" style={{ backgroundColor: avatarColor }}>
-        {avatarText}
-      </div>
-      <div className="message-body">
-        <div className="message-header">
-          <span className="message-author">{author === '匿名' ? '匿名用户' : author}</span>
-          <span className="message-time" title={formatFullTime(timestamp)}>
-            {formatTime(timestamp)}
-          </span>
+    <>
+      <div className={`chat-message ${isOwn ? 'own' : ''}`}>
+        <div className="message-avatar" style={{ backgroundColor: avatarColor }}>
+          {avatarText}
         </div>
-        <div className="message-content">{text}</div>
+        <div className="message-body">
+          <div className="message-header">
+            <span className="message-author">{author === '匿名' ? '匿名用户' : author}</span>
+            <span className="message-time" title={formatFullTime(timestamp)}>
+              {formatTime(timestamp)}
+            </span>
+          </div>
+          <div className="message-content">
+            {parsedContent.parts.map((part, index) => {
+              if (part.type === 'image') {
+                return (
+                  <div key={index} className="message-image-container">
+                    <img
+                      src={part.content}
+                      alt="消息图片"
+                      className="message-image"
+                      onClick={() => setExpandedImage(part.content)}
+                      loading="lazy"
+                    />
+                    <div className="image-hint">点击查看大图</div>
+                  </div>
+                );
+              } else {
+                return (
+                  <span key={index} className="message-text">
+                    {part.content}
+                  </span>
+                );
+              }
+            })}
+          </div>
+        </div>
       </div>
-    </div>
+      {expandedImage && (
+        <div className="image-modal" onClick={() => setExpandedImage(null)}>
+          <div className="image-modal-content" onClick={(e) => e.stopPropagation()}>
+            <button className="image-modal-close" onClick={() => setExpandedImage(null)}>
+              ×
+            </button>
+            <img src={expandedImage} alt="大图预览" className="image-modal-image" />
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 

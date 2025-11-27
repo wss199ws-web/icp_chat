@@ -11,6 +11,10 @@
   gap: 12px;
 }
 
+.input-header {
+  position: relative;
+}
+
 .message-input {
   width: 100%;
   padding: 12px;
@@ -37,6 +41,59 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.input-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.upload-button {
+  background: #f5f5f5;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 36px;
+}
+
+.upload-button:hover:not(:disabled) {
+  background: #667eea;
+  border-color: #667eea;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.upload-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.upload-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.processing-indicator {
+  font-size: 12px;
+  color: #667eea;
+  font-weight: 500;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .char-count {

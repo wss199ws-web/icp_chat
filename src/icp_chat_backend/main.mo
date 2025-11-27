@@ -9,15 +9,20 @@ import Result "mo:base/Result";
 // 去掉 persistent / transient，用普通 actor 即可
 actor ICPChat {
 
-  // 配置常量（顶层 let 本来就是只读的，不需要 transient）
-  let MAX_MESSAGE_LENGTH : Nat = 1000; // 单条消息最大长度
-  let MAX_MESSAGES : Nat = 10000;      // 最大消息数量
-  let DEFAULT_PAGE_SIZE : Nat = 50;    // 默认分页大小
+  // 配置常量
+  stable let MAX_MESSAGE_LENGTH : Nat = 5000; // 单条消息最大长度（支持文本和图片 base64）
+  stable let MAX_MESSAGES : Nat = 10000;      // 最大消息数量
+  stable let DEFAULT_PAGE_SIZE : Nat = 50;    // 默认分页大小
 
+  // 消息类型
+  // text 字段可以包含：
+  // 1. 纯文本消息
+  // 2. 图片消息：格式为 [图片]data:image/jpeg;base64,...（由前端自动处理）
+  // 3. 混合消息：文本 + 图片
   public type Message = {
     id : Nat;
     author : Text;
-    text : Text;
+    text : Text;  // 支持文本和图片（图片以 base64 字符串形式存储）
     timestamp : Int;
   };
 
@@ -35,7 +40,9 @@ actor ICPChat {
   stable var messages : [Message] = [];
   stable var nextId : Nat = 0;
 
-  // 验证消息文本（这里简单用非空 + 长度限制，避免 trim 的版本差异问题）
+  // 验证消息内容
+  // 支持文本和图片（图片以 base64 字符串形式存储，格式：[图片]data:image/...）
+  // 前端已经处理了图片压缩和格式验证，后端只需要检查长度和非空
   private func validateMessage(text : Text) : Result.Result<Text, Text> {
     if (Text.size(text) == 0) {
       return #err("消息内容不能为空");
@@ -43,6 +50,11 @@ actor ICPChat {
     if (Text.size(text) > MAX_MESSAGE_LENGTH) {
       return #err("消息长度不能超过 " # Nat.toText(MAX_MESSAGE_LENGTH) # " 个字符");
     };
+    // 图片消息格式由前端保证，后端只做长度验证
+    // 支持的消息类型：
+    // 1. 纯文本消息
+    // 2. 图片消息：[图片]data:image/jpeg;base64,...
+    // 3. 混合消息：文本\n[图片]data:image/...
     #ok(text)
   };
 
