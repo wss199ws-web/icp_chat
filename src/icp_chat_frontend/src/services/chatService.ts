@@ -26,6 +26,8 @@ interface CachedMessages {
 
 class ChatService {
   private actor: _SERVICE | null = null;
+  private readonly DIRECT_UPLOAD_LIMIT = 3.5 * 1024 * 1024; // 3.5MB
+  private readonly CHUNK_SIZE = 1 * 1024 * 1024; // 1MB
   
   // 消息缓存
   private messagesCache: CachedMessages | null = null;
@@ -54,27 +56,14 @@ class ChatService {
 
     try {
       console.log(`[ChatService] 开始上传图片，大小: ${imageBlob.size} bytes, 类型: ${imageBlob.type}`);
-      // 将 Blob 转换为 Uint8Array（字节数组）
       const arrayBuffer = await imageBlob.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
-      const bytes = Array.from(uint8Array);
-      console.log(`[ChatService] 图片转换为字节数组，长度: ${bytes.length}`);
-      
-      const result = await this.actor!.uploadImage(bytes);
-      if ('ok' in result) {
-        const imageId = Number(result.ok);
-        console.log(`[ChatService] 图片上传成功，imageId: ${imageId}`);
-        return {
-          success: true,
-          imageId: imageId,
-        };
-      } else {
-        console.error(`[ChatService] 图片上传失败: ${result.err}`);
-        return {
-          success: false,
-          error: result.err,
-        };
+
+      if (uint8Array.length <= this.DIRECT_UPLOAD_LIMIT) {
+        return this.uploadImageDirect(uint8Array);
       }
+
+      return this.uploadImageInChunks(uint8Array, imageBlob.type || 'application/octet-stream');
     } catch (error) {
       console.error('[ChatService] 图片上传异常:', error);
       return {
@@ -82,6 +71,82 @@ class ChatService {
         error: error instanceof Error ? error.message : '上传图片失败',
       };
     }
+  }
+
+  private async uploadImageDirect(uint8Array: Uint8Array): Promise<{ success: boolean; imageId?: number; error?: string }> {
+    const bytes = Array.from(uint8Array);
+    console.log(`[ChatService] 走直传路径，字节长度: ${bytes.length}`);
+    const result = await this.actor!.uploadImage(bytes);
+    if ('ok' in result) {
+      const imageId = Number(result.ok);
+      console.log(`[ChatService] 图片上传成功，imageId: ${imageId}`);
+      return {
+        success: true,
+        imageId,
+      };
+    }
+    console.error(`[ChatService] 图片上传失败: ${result.err}`);
+    return {
+      success: false,
+      error: result.err,
+    };
+  }
+
+  private async uploadImageInChunks(
+    uint8Array: Uint8Array,
+    mimeType: string
+  ): Promise<{ success: boolean; imageId?: number; error?: string }> {
+    console.log('[ChatService] 使用分块上传策略');
+    const startResult = await this.actor!.startImageUpload(BigInt(uint8Array.length), mimeType);
+    if ('err' in startResult) {
+      console.error('[ChatService] 创建上传会话失败:', startResult.err);
+      return {
+        success: false,
+        error: startResult.err,
+      };
+    }
+
+    const uploadId = startResult.ok;
+    let offset = 0;
+    while (offset < uint8Array.length) {
+      const end = Math.min(offset + this.CHUNK_SIZE, uint8Array.length);
+      const chunk = uint8Array.slice(offset, end);
+      const isFinal = end >= uint8Array.length;
+      console.log(`[ChatService] 上传分块 offset=${offset}, end=${end}, isFinal=${isFinal}`);
+      const chunkResult = await this.actor!.uploadImageChunk(uploadId, Array.from(chunk), isFinal);
+      if ('err' in chunkResult) {
+        console.error('[ChatService] 分块上传失败:', chunkResult.err);
+        return {
+          success: false,
+          error: chunkResult.err,
+        };
+      }
+
+      if (isFinal) {
+        const optImageId = chunkResult.ok;
+        if (Array.isArray(optImageId) && optImageId.length > 0) {
+          const imageId = Number(optImageId[0]);
+          console.log(`[ChatService] 分块上传完成，imageId: ${imageId}`);
+          return {
+            success: true,
+            imageId,
+          };
+        }
+        console.error('[ChatService] 分块上传完成但未返回图片ID');
+        return {
+          success: false,
+          error: '图片上传失败，未返回图片ID',
+        };
+      }
+
+      offset = end;
+    }
+
+    console.error('[ChatService] 分块上传流程异常结束');
+    return {
+      success: false,
+      error: '图片上传失败，分块流程异常',
+    };
   }
 
   async getImage(imageId: number): Promise<Blob | null> {

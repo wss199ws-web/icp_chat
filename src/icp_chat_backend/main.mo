@@ -8,6 +8,8 @@ import Result "mo:base/Result";
 import HashMap "mo:base/HashMap";
 import Blob "mo:base/Blob";
 import Hash "mo:base/Hash";
+import Buffer "mo:base/Buffer";
+import Nat8 "mo:base/Nat8";
 
 // 去掉 persistent / transient，用普通 actor 即可
 actor ICPChat {
@@ -41,10 +43,29 @@ actor ICPChat {
   stable var messages : [Message] = [];
   stable var nextId : Nat = 0;
   stable var nextImageId : Nat = 0;
+  stable var nextUploadId : Nat = 0;
   
   // 图片存储：使用 HashMap 存储图片数据
   // 注意：HashMap 不能直接 stable，需要序列化/反序列化
   var images : HashMap.HashMap<Nat, Blob> = HashMap.HashMap<Nat, Blob>(0, Nat.equal, Hash.hash);
+  
+  type UploadSession = {
+    buffer : Buffer.Buffer<Nat8>;
+    var receivedSize : Nat;
+    totalSize : Nat;
+    mimeType : Text;
+  };
+
+  private func newUploadSession(totalSize : Nat, mimeType : Text) : UploadSession {
+    {
+      buffer = Buffer.Buffer<Nat8>(Nat.min(totalSize, 1024));
+      var receivedSize = 0;
+      totalSize = totalSize;
+      mimeType = mimeType;
+    };
+  };
+
+  var uploadSessions : HashMap.HashMap<Nat, UploadSession> = HashMap.HashMap<Nat, UploadSession>(0, Nat.equal, Hash.hash);
   
   // 将 HashMap 转换为数组用于序列化
   private func imagesToArray() : [(Nat, Blob)] {
@@ -133,6 +154,14 @@ actor ICPChat {
     };
   };
 
+  private func storeValidatedImage(validBlob : Blob) : Nat {
+    cleanupOldImages();
+    let imageId = nextImageId;
+    images.put(imageId, validBlob);
+    nextImageId += 1;
+    imageId
+  };
+
   // 清理旧消息（当超过上限时）
   private func cleanupOldMessages() {
     let len = messages.size();
@@ -156,14 +185,64 @@ actor ICPChat {
         return #err(msg);
       };
       case (#ok(validBlob)) {
-        // 清理旧图片（如果需要）
-        cleanupOldImages();
-        
-        let imageId = nextImageId;
-        images.put(imageId, validBlob);
-        nextImageId += 1;
-        
+        let imageId = storeValidatedImage(validBlob);
         #ok(imageId)
+      };
+    };
+  };
+
+  public shared ({ caller }) func startImageUpload(totalSize : Nat, mimeType : Text) : async Result.Result<Nat, Text> {
+    if (totalSize == 0) {
+      return #err("图片不能为空");
+    };
+    if (totalSize > MAX_IMAGE_SIZE) {
+      return #err("图片大小不能超过 " # Nat.toText(MAX_IMAGE_SIZE / 1_000_000) # "MB");
+    };
+
+    let uploadId = nextUploadId;
+    nextUploadId += 1;
+    uploadSessions.put(uploadId, newUploadSession(totalSize, mimeType));
+    #ok(uploadId)
+  };
+
+  public shared ({ caller }) func uploadImageChunk(uploadId : Nat, chunk : [Nat8], isFinal : Bool) : async Result.Result<?Nat, Text> {
+    switch (uploadSessions.get(uploadId)) {
+      case null {
+        return #err("上传会话不存在或已完成");
+      };
+      case (?session) {
+        if (chunk.size() > 0) {
+          for (byte in chunk.vals()) {
+            session.buffer.add(byte);
+          };
+          session.receivedSize += chunk.size();
+        };
+
+        if (session.receivedSize > MAX_IMAGE_SIZE) {
+          uploadSessions.delete(uploadId);
+          return #err("图片大小超过限制");
+        };
+
+        if (isFinal) {
+          uploadSessions.delete(uploadId);
+          if (session.buffer.size() == 0) {
+            return #err("图片数据为空");
+          };
+
+          let bytesArray = Buffer.toArray(session.buffer);
+          let finalBlob = Blob.fromArray(bytesArray);
+          switch (validateImage(finalBlob)) {
+            case (#err(msg)) {
+              return #err(msg);
+            };
+            case (#ok(validBlob)) {
+              let imageId = storeValidatedImage(validBlob);
+              return #ok(?imageId);
+            };
+          };
+        } else {
+          return #ok(null);
+        };
       };
     };
   };
