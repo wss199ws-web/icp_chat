@@ -88,3 +88,55 @@
   }
 }
 
+/* 移动端优化 */
+@media (max-width: 768px) {
+  .message-list {
+    padding: 12px 8px;
+    border-radius: 8px;
+  }
+
+  .empty-state {
+    min-height: 300px;
+  }
+
+  .empty-icon {
+    font-size: 36px;
+    margin-bottom: 12px;
+  }
+
+  .empty-state p {
+    font-size: 14px;
+  }
+
+  .load-more-indicator {
+    font-size: 12px;
+    margin-bottom: 10px;
+  }
+
+  .load-more-spinner {
+    width: 18px;
+    height: 18px;
+    border-width: 2px;
+  }
+}
+
+/* 小屏幕手机优化 */
+@media (max-width: 480px) {
+  .message-list {
+    padding: 10px 6px;
+  }
+
+  .empty-state {
+    min-height: 250px;
+  }
+
+  .empty-icon {
+    font-size: 32px;
+    margin-bottom: 10px;
+  }
+
+  .empty-state p {
+    font-size: 13px;
+  }
+}
+

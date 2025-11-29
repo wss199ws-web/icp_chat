@@ -430,21 +430,76 @@
   color: #cf1322;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 768px) {
+  .key-management-overlay {
+    padding: 10px;
+    align-items: flex-end;
+  }
+
   .key-management-modal {
-    width: 95%;
-    max-height: 95vh;
+    width: 100%;
+    max-width: 100%;
+    max-height: 90vh;
+    border-radius: 16px 16px 0 0;
+    animation: slideUpMobile 0.3s ease-out;
+  }
+
+  @keyframes slideUpMobile {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  .key-management-header {
+    padding: 16px 20px;
+  }
+
+  .key-management-header h2 {
+    font-size: 20px;
+  }
+
+  .close-btn {
+    width: 28px;
+    height: 28px;
+    font-size: 28px;
   }
 
   .key-management-tabs {
+    padding: 0 20px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .key-management-tabs::-webkit-scrollbar {
+    display: none;
   }
 
   .key-management-tabs button {
     white-space: nowrap;
     padding: 12px 16px;
     font-size: 13px;
+  }
+
+  .key-management-card {
+    padding: 16px 20px 20px;
+    border-radius: 12px;
+  }
+
+  .key-management-title {
+    font-size: 18px;
+  }
+
+  .key-management-desc {
+    font-size: 12px;
+  }
+
+  .key-management-form-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
   }
 
   .sync-actions,
@@ -455,6 +510,53 @@
   .action-btn {
     width: 100%;
     margin-right: 0;
+    margin-bottom: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .key-management-modal {
+    max-height: 95vh;
+  }
+
+  .key-management-header {
+    padding: 14px 16px;
+  }
+
+  .key-management-header h2 {
+    font-size: 18px;
+  }
+
+  .key-management-tabs {
+    padding: 0 16px;
+  }
+
+  .key-management-tabs button {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+
+  .key-management-card {
+    padding: 14px 16px 18px;
+  }
+
+  .key-management-title {
+    font-size: 16px;
+  }
+
+  .key-management-form {
+    gap: 12px;
+  }
+
+  .key-management-input,
+  .key-management-textarea {
+    font-size: 16px; /* 防止 iOS 自动缩放 */
+    padding: 10px 12px;
+  }
+
+  .key-management-button {
+    padding: 10px 18px;
+    font-size: 13px;
   }
 }
 

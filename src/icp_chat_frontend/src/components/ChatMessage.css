@@ -195,3 +195,126 @@
   }
 }
 
+/* 移动端优化 */
+@media (max-width: 768px) {
+  .chat-message {
+    margin-bottom: 8px;
+    padding: 4px 8px 0 8px;
+    gap: 8px;
+  }
+
+  .chat-message:hover {
+    transform: none; /* 移动端禁用悬停效果 */
+  }
+
+  .message-avatar {
+    width: 36px;
+    height: 36px;
+    font-size: 14px;
+  }
+
+  .message-body {
+    padding: 6px 16px 0 8px;
+    border-radius: 6px;
+  }
+
+  .message-header {
+    margin-bottom: 6px;
+    font-size: 11px;
+  }
+
+  .message-author {
+    font-size: 12px;
+  }
+
+  .message-time {
+    font-size: 10px;
+    padding-left: 8px;
+  }
+
+  .message-content {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .message-text {
+    margin-bottom: 6px;
+  }
+
+  .message-mention {
+    font-size: 12px;
+    padding: 1px 3px;
+  }
+
+  .message-image {
+    margin-top: 6px;
+    border-radius: 6px;
+  }
+
+  .message-image img {
+    max-width: 100%;
+  }
+
+  .decrypt-error {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+}
+
+/* 小屏幕手机优化 */
+@media (max-width: 480px) {
+  .chat-message {
+    margin-bottom: 6px;
+    padding: 3px 6px 0 6px;
+    gap: 6px;
+  }
+
+  .message-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+  }
+
+  .message-body {
+    padding: 5px 12px 0 6px;
+    border-radius: 5px;
+  }
+
+  .message-header {
+    margin-bottom: 4px;
+    font-size: 10px;
+  }
+
+  .message-author {
+    font-size: 11px;
+  }
+
+  .message-time {
+    font-size: 9px;
+    padding-left: 6px;
+  }
+
+  .message-content {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .message-text {
+    margin-bottom: 4px;
+  }
+
+  .message-mention {
+    font-size: 11px;
+    padding: 1px 2px;
+  }
+
+  .message-image {
+    margin-top: 4px;
+  }
+
+  .decrypt-error {
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+}
+

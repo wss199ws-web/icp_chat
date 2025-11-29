@@ -198,3 +198,133 @@
   opacity: 0.6;
 }
 
+/* 移动端优化 */
+@media (max-width: 768px) {
+  .message-input-container {
+    border-radius: 10px;
+    padding: 6px;
+  }
+
+  .input-wrapper {
+    gap: 10px;
+  }
+
+  .message-input {
+    padding: 10px;
+    font-size: 16px; /* 防止 iOS 自动缩放 */
+    min-height: 50px;
+    border-radius: 6px;
+  }
+
+  .image-preview {
+    max-width: 250px;
+    margin-bottom: 10px;
+    border-radius: 6px;
+  }
+
+  .remove-image-btn {
+    width: 24px;
+    height: 24px;
+    font-size: 18px;
+    top: 6px;
+    right: 6px;
+  }
+
+  .input-footer {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .input-actions {
+    gap: 8px;
+  }
+
+  .emoji-btn,
+  .image-upload-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
+    border-radius: 6px;
+  }
+
+  .char-count {
+    font-size: 11px;
+  }
+
+  .send-button {
+    padding: 8px 20px;
+    font-size: 13px;
+    border-radius: 6px;
+    min-width: 60px;
+  }
+
+  .base64-hint {
+    font-size: 10px;
+    padding: 3px 6px;
+  }
+}
+
+/* 小屏幕手机优化 */
+@media (max-width: 480px) {
+  .message-input-container {
+    padding: 5px;
+    border-radius: 8px;
+  }
+
+  .input-wrapper {
+    gap: 8px;
+  }
+
+  .message-input {
+    padding: 8px;
+    font-size: 16px; /* 保持 16px 防止 iOS 缩放 */
+    min-height: 44px; /* iOS 推荐的最小触摸目标 */
+    border-radius: 5px;
+  }
+
+  .image-preview {
+    max-width: 200px;
+    margin-bottom: 8px;
+  }
+
+  .remove-image-btn {
+    width: 22px;
+    height: 22px;
+    font-size: 16px;
+    top: 4px;
+    right: 4px;
+  }
+
+  .input-footer {
+    gap: 6px;
+  }
+
+  .input-actions {
+    gap: 6px;
+  }
+
+  .emoji-btn,
+  .image-upload-btn {
+    width: 30px;
+    height: 30px;
+    font-size: 16px;
+    border-radius: 5px;
+  }
+
+  .char-count {
+    font-size: 10px;
+  }
+
+  .send-button {
+    padding: 7px 16px;
+    font-size: 12px;
+    border-radius: 5px;
+    min-width: 55px;
+  }
+
+  .base64-hint {
+    font-size: 9px;
+    padding: 2px 4px;
+  }
+}
+

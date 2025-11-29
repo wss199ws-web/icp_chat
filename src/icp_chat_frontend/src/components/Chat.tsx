@@ -208,7 +208,15 @@ const Chat: React.FC = () => {
         if (errorMessage.includes('Canister ID')) {
           userMessage = 'Canister ID 未配置。请先运行: dfx deploy';
         } else if (errorMessage.includes('fetchRootKey') || errorMessage.includes('network')) {
-          userMessage = '无法连接到 ICP 网络。请确保已启动本地网络: dfx start --background';
+          const network = (window as any).__ICP_ENV__?.DFX_NETWORK || 'local';
+          if (network === 'ic') {
+            userMessage = '无法连接到 ICP 主网。如果在中国大陆，可能需要使用 VPN 或切换 API 端点。请点击导航栏的 🌐 图标配置网络。';
+          } else {
+            userMessage = '无法连接到 ICP 网络。请确保已启动本地网络: dfx start --background';
+          }
+        } else if (errorMessage.includes('无法连接到 ICP 网络')) {
+          // 这是从 icpAgent 抛出的错误，已经包含了详细提示
+          userMessage = errorMessage;
         }
         
         setError(userMessage);

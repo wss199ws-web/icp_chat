@@ -228,7 +228,15 @@ export const config = {
     if (network === 'ic') {
       // 如果直接访问主网域名，使用主网 API
       if (hostname.includes('.ic0.app') || hostname.includes('.icp0.io')) {
-        host = 'https://icp-api.io';
+        // 尝试从 localStorage 获取用户选择的自定义端点
+        const customHost = typeof window !== 'undefined' ? localStorage.getItem('ICP_CUSTOM_API_HOST') : null;
+        if (customHost) {
+          host = customHost;
+          console.log('[Config] 使用用户自定义的 API 端点:', host);
+        } else {
+          // 默认使用 icp-api.io，如果无法访问可以尝试其他端点
+          host = 'https://icp-api.io';
+        }
       } else {
         // 通过 localhost 代理访问主网，使用 localhost:4943
         host = 'http://localhost:4943';
@@ -239,5 +247,30 @@ export const config = {
     
     console.log('[Config] 使用的 host:', host, 'network:', network, 'hostname:', hostname, '当前 URL:', typeof window !== 'undefined' ? window.location.href : 'N/A');
     return host;
+  },
+  
+  // 获取所有可用的 ICP 主网 API 端点列表
+  get availableHosts(): string[] {
+    return [
+      'https://icp-api.io',
+      'https://ic0.app',
+      'https://boundary.ic0.app',
+    ];
+  },
+  
+  // 设置自定义 API 端点（用于解决网络访问问题）
+  setCustomHost(host: string): void {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ICP_CUSTOM_API_HOST', host);
+      console.log('[Config] 已设置自定义 API 端点:', host);
+    }
+  },
+  
+  // 清除自定义 API 端点
+  clearCustomHost(): void {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('ICP_CUSTOM_API_HOST');
+      console.log('[Config] 已清除自定义 API 端点');
+    }
   },
 };

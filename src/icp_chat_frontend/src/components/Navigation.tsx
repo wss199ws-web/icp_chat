@@ -2,11 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import './Navigation.css';
 import { authService } from '../services/authService';
+import NetworkConfig from './NetworkConfig';
+import { config } from '../config';
 
 const Navigation: React.FC = () => {
   const location = useLocation();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [principal, setPrincipal] = useState<string | null>(null);
+  const [showNetworkConfig, setShowNetworkConfig] = useState<boolean>(false);
 
   useEffect(() => {
     (async () => {
@@ -53,6 +56,16 @@ const Navigation: React.FC = () => {
             👤 个人信息
           </Link>
           <div className="nav-auth">
+            {config.network === 'ic' && (
+              <button
+                className="nav-network-button"
+                type="button"
+                onClick={() => setShowNetworkConfig(true)}
+                title="网络配置"
+              >
+                🌐
+              </button>
+            )}
             {isAuthenticated ? (
               <>
                 <span className="nav-principal" title={principal || undefined}>
@@ -78,6 +91,9 @@ const Navigation: React.FC = () => {
           </div>
         </div>
       </div>
+      {showNetworkConfig && (
+        <NetworkConfig onClose={() => setShowNetworkConfig(false)} />
+      )}
     </nav>
   );
 };

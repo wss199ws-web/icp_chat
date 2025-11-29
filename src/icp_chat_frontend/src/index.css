@@ -4,6 +4,14 @@
   box-sizing: border-box;
 }
 
+html {
+  /* 防止移动端缩放 */
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+  /* 平滑滚动 */
+  scroll-behavior: smooth;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
@@ -16,11 +24,27 @@ body {
   justify-content: center;
   align-items: center;
   padding: 20px;
+  /* 移动端优化 */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 #root {
   width: 100%;
   max-width: 1200px;
   height: 100%;
+}
+
+/* 移动端优化 */
+@media (max-width: 768px) {
+  body {
+    padding: 0;
+    align-items: flex-start;
+  }
+
+  #root {
+    max-width: 100%;
+    height: 100vh;
+  }
 }
 

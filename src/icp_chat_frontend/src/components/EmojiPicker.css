@@ -132,16 +132,81 @@
     left: 0;
     right: 0;
     margin: 0 auto 8px;
+    max-height: 350px;
+    border-radius: 10px;
+  }
+
+  .emoji-picker-header {
+    padding: 6px;
+  }
+
+  .emoji-category-btn {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  .emoji-picker-body {
+    padding: 6px;
+    max-height: 250px;
   }
 
   .emoji-grid {
     grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
   }
 
   .emoji-item {
     width: 32px;
     height: 32px;
     font-size: 20px;
+  }
+
+  .emoji-picker-footer {
+    padding: 6px;
+  }
+
+  .emoji-picker-close {
+    padding: 5px 14px;
+    font-size: 12px;
+  }
+}
+
+/* 小屏幕手机优化 */
+@media (max-width: 480px) {
+  .emoji-picker {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: 8px;
+  }
+
+  .emoji-picker-header {
+    padding: 5px;
+  }
+
+  .emoji-category-btn {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .emoji-picker-body {
+    padding: 5px;
+    max-height: 200px;
+  }
+
+  .emoji-grid {
+    grid-template-columns: repeat(6, 1fr);
+    gap: 2px;
+  }
+
+  .emoji-item {
+    width: 28px;
+    height: 28px;
+    font-size: 18px;
+  }
+
+  .emoji-picker-close {
+    padding: 4px 12px;
+    font-size: 11px;
   }
 }
 
