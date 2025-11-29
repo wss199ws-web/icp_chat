@@ -39,6 +39,14 @@ actor ICPChat {
     totalPages : Nat;
   };
 
+  // 用户资料类型（方案 B：基于 Principal 的个人信息配置）
+  public type UserProfile = {
+    nickname : Text;
+    avatar : ?Text; // 头像URL 或 标识
+    color : ?Text;  // 主题色 / 昵称颜色
+    bio : ?Text;    // 个性签名
+  };
+
   // 持久化状态用 stable 即可
   stable var messages : [Message] = [];
   stable var nextId : Nat = 0;
@@ -92,6 +100,7 @@ actor ICPChat {
     imagesStable := imagesToArray();
     userKeysStable := userKeysToArray();
     groupKeysStable := groupKeysToArray();
+    userProfilesStable := userProfilesToArray();
   };
   
   // 系统升级时恢复数据
@@ -106,6 +115,11 @@ actor ICPChat {
     if (groupKeysStable.size() > 0) {
       groupKeysFromArray(groupKeysStable);
       groupKeysStable := [];
+    };
+    // 恢复用户资料
+    if (userProfilesStable.size() > 0) {
+      userProfilesFromArray(userProfilesStable);
+      userProfilesStable := [];
     };
   };
 
@@ -272,11 +286,20 @@ actor ICPChat {
         return #err(msg);
       };
       case (#ok(validText)) {
+        // 优先使用用户自己的昵称；如果没有配置，再回退到默认规则
         let author =
-          if (Principal.isAnonymous(caller)) {
-            "匿名"
-          } else {
-            Principal.toText(caller);
+          switch (userProfiles.get(caller)) {
+            case (?profile) {
+              // 使用用户配置的昵称
+              profile.nickname;
+            };
+            case (null) {
+              if (Principal.isAnonymous(caller)) {
+                "匿名";
+              } else {
+                Principal.toText(caller);
+              };
+            };
           };
 
         let msg : Message = {
@@ -438,6 +461,31 @@ actor ICPChat {
   
   // Stable 存储用户密钥数组
   stable var userKeysStable : [(Principal, Text)] = [];
+
+  // ========== 用户资料（个人信息配置）相关 ==========
+
+  // 用户资料存储：Principal -> UserProfile
+  var userProfiles : HashMap.HashMap<Principal, UserProfile> = HashMap.HashMap<Principal, UserProfile>(0, Principal.equal, Principal.hash);
+
+  // 将用户资料 HashMap 转换为数组用于序列化
+  private func userProfilesToArray() : [(Principal, UserProfile)] {
+    var arr : [(Principal, UserProfile)] = [];
+    for ((principal, profile) in userProfiles.entries()) {
+      arr := Array.append(arr, [(principal, profile)]);
+    };
+    arr
+  };
+
+  // 从数组恢复用户资料 HashMap
+  private func userProfilesFromArray(arr : [(Principal, UserProfile)]) {
+    userProfiles := HashMap.HashMap<Principal, UserProfile>(0, Principal.equal, Principal.hash);
+    for ((principal, profile) in arr.vals()) {
+      userProfiles.put(principal, profile);
+    };
+  };
+
+  // Stable 存储用户资料数组
+  stable var userProfilesStable : [(Principal, UserProfile)] = [];
   
 
   // 保存用户加密密钥（用于跨设备同步）
@@ -534,6 +582,67 @@ actor ICPChat {
     };
     groupKeys.delete(groupId);
     true
+  };
+
+  // ========== 用户资料（个人信息配置）API ==========
+
+  // 保存/更新当前 Principal 的用户资料
+  public shared ({ caller }) func saveUserProfile(profile : UserProfile) : async Result.Result<Bool, Text> {
+    // 注意：为了方便本地开发和匿名访问，这里暂时允许匿名 Principal 也保存资料。
+    // 在正式环境中可以恢复下面的校验，强制要求登录身份：
+    // if (Principal.isAnonymous(caller)) {
+    //   return #err("匿名用户无法保存个人资料");
+    // };
+
+    // 简单校验：昵称不能为空且长度限制
+    if (Text.size(profile.nickname) == 0) {
+      return #err("昵称不能为空");
+    };
+    if (Text.size(profile.nickname) > 50) {
+      return #err("昵称长度不能超过 50 个字符");
+    };
+
+    // 头像、颜色、签名增加简单长度限制，避免滥用
+    switch (profile.avatar) {
+      case (null) {};
+      case (?url) {
+        // 头像现在支持 data URL（base64），长度会比普通 URL 大很多，这里放宽限制
+        if (Text.size(url) > 200_000) {
+          return #err("头像数据过大");
+        };
+      };
+    };
+
+    switch (profile.color) {
+      case (null) {};
+      case (?c) {
+        if (Text.size(c) > 50) {
+          return #err("颜色字符串过长");
+        };
+      };
+    };
+
+    switch (profile.bio) {
+      case (null) {};
+      case (?b) {
+        if (Text.size(b) > 200) {
+          return #err("签名长度不能超过 200 个字符");
+        };
+      };
+    };
+
+    userProfiles.put(caller, profile);
+    #ok(true)
+  };
+
+  // 获取当前 Principal 的用户资料
+  public shared query ({ caller }) func getUserProfile() : async ?UserProfile {
+    // 同 saveUserProfile 一致，这里也允许匿名查询自己的资料
+    // 正式环境可根据需要重新启用匿名拦截
+    // if (Principal.isAnonymous(caller)) {
+    //   return null;
+    // };
+    userProfiles.get(caller)
   };
 
 }

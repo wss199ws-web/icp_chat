@@ -4,6 +4,7 @@ import Navigation from './components/Navigation';
 import Chat from './components/Chat';
 import NewsList from './components/NewsList';
 import NewsDetail from './components/NewsDetail';
+import UserProfile from './components/UserProfile';
 import './App.css';
 
 /**
@@ -16,11 +17,13 @@ const AppContent: React.FC = () => {
   // 使用 useMemo 确保组件实例只创建一次
   const chatComponent = useMemo(() => <Chat key="chat" />, []);
   const newsListComponent = useMemo(() => <NewsList key="news-list" />, []);
+  const profileComponent = useMemo(() => <UserProfile key="user-profile" />, []);
 
   // 判断当前应该显示哪个组件
   const isNewsDetail = location.pathname.startsWith('/news/') && location.pathname !== '/news';
   const isChat = location.pathname === '/';
   const isNewsList = location.pathname === '/news';
+  const isProfile = location.pathname === '/profile';
 
   return (
     <div className="app-wrapper">
@@ -63,6 +66,20 @@ const AppContent: React.FC = () => {
             </Routes>
           </div>
         )}
+
+        {/* 个人信息配置页面 - 使用 display: none 保持状态 */}
+        <div
+          style={{
+            display: isProfile ? 'block' : 'none',
+            width: '100%',
+            height: '100%',
+            position: isProfile ? 'relative' : 'absolute',
+            top: 0,
+            left: 0,
+          }}
+        >
+          {profileComponent}
+        </div>
       </div>
     </div>
   );

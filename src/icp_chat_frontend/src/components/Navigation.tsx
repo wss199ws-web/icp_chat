@@ -28,6 +28,12 @@ const Navigation: React.FC = () => {
           >
             📰 新闻
           </Link>
+          <Link
+            to="/profile"
+            className={`nav-link ${isActive('/profile') ? 'active' : ''}`}
+          >
+            👤 个人信息
+          </Link>
         </div>
       </div>
     </nav>

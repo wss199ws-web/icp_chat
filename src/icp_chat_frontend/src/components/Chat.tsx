@@ -4,6 +4,7 @@ import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import KeyManagement from './KeyManagement';
 import { encryptionService } from '../services/encryptionService';
+import { userProfileService } from '../services/userProfileService';
 import '../App.css';
 
 const PAGE_SIZE = 10;
@@ -15,6 +16,8 @@ interface CachedChatState {
   currentPage: number;
   hasMoreMessages: boolean;
   timestamp: number;
+  currentUser?: string | null;
+  ownAuthors?: string[];
 }
 
 const loadCachedState = (): CachedChatState | null => {
@@ -61,7 +64,14 @@ const Chat: React.FC = () => {
   const [messageCount, setMessageCount] = useState(
     () => initialCachedState?.messageCount ?? 0,
   );
-  const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<string | null>(
+    () => initialCachedState?.currentUser ?? null,
+  );
+  const [currentUserAvatar, setCurrentUserAvatar] = useState<string | null>(null);
+  const [currentUserColor, setCurrentUserColor] = useState<string | null>(null);
+  const [ownAuthors, setOwnAuthors] = useState<string[]>(
+    () => initialCachedState?.ownAuthors ?? [],
+  );
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [encryptionAvailable, setEncryptionAvailable] = useState<boolean>(false);
   const [showKeyManagement, setShowKeyManagement] = useState<boolean>(false);
@@ -86,8 +96,10 @@ const Chat: React.FC = () => {
       currentPage,
       hasMoreMessages,
       timestamp: Date.now(),
+      currentUser,
+      ownAuthors,
     });
-  }, [messages, messageCount, currentPage, hasMoreMessages]);
+  }, [messages, messageCount, currentPage, hasMoreMessages, currentUser, ownAuthors]);
 
   // 加载最新一页消息
   const loadLatestMessages = useCallback(async () => {
@@ -100,6 +112,32 @@ const Chat: React.FC = () => {
     } catch (err) {
       console.error('加载消息失败:', err);
     }
+  }, []);
+
+  // 加载当前用户的个人资料（用于头像等）
+  useEffect(() => {
+    (async () => {
+      try {
+        const profile = await userProfileService.getProfile();
+        if (profile) {
+          setCurrentUserAvatar(profile.avatar ?? null);
+          setCurrentUserColor(profile.color ?? null);
+          // 如果有昵称，把昵称加入“自己的作者名”列表，避免改名后历史消息失去高亮
+          if (profile.nickname) {
+            setOwnAuthors((prev) =>
+              prev.includes(profile.nickname) ? prev : [...prev, profile.nickname],
+            );
+            if (!currentUser) {
+              setCurrentUser(profile.nickname);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[Chat] 加载用户资料失败（不影响聊天功能）:', err);
+      }
+    })();
+    // 仅在首次挂载时尝试加载一次资料
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 加载更多历史消息
@@ -258,8 +296,13 @@ const Chat: React.FC = () => {
       if (result.success && result.message) {
         setMessages((prev) => [...prev, result.message!]);
         setMessageCount((prev) => prev + 1);
-        if (!currentUser && result.message.author !== '匿名') {
-          setCurrentUser(result.message.author);
+        const author = result.message.author;
+        if (author && author !== '匿名') {
+          // 记录下“自己用过的作者名”，用于识别历史消息
+          setOwnAuthors((prev) => (prev.includes(author) ? prev : [...prev, author]));
+          if (!currentUser) {
+            setCurrentUser(author);
+          }
         }
 
         // 当前窗口发送成功后，通知其他窗口刷新
@@ -360,6 +403,9 @@ const Chat: React.FC = () => {
           onLoadMore={loadOlderMessages}
           hasMore={hasMoreMessages}
           isLoadingMore={isLoadingMore}
+          ownAvatar={currentUserAvatar}
+          ownColor={currentUserColor}
+          ownAuthors={ownAuthors}
         />
 
         <MessageInput onSend={handleSendMessage} disabled={sending} />

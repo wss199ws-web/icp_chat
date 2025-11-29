@@ -10,6 +10,8 @@ export interface ChatMessageProps {
   timestamp: bigint;
   imageId?: number | null;
   isOwn?: boolean;
+  avatarUrl?: string | null;
+  nicknameColor?: string | null;
 }
 
 // 根据用户名生成头像颜色
@@ -39,7 +41,15 @@ const getAvatarText = (name: string): string => {
   return firstChar.toUpperCase();
 };
 
-const ChatMessage: React.FC<ChatMessageProps> = ({ author, text, timestamp, imageId, isOwn = false }) => {
+const ChatMessage: React.FC<ChatMessageProps> = ({
+  author,
+  text,
+  timestamp,
+  imageId,
+  isOwn = false,
+  avatarUrl,
+  nicknameColor,
+}) => {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
@@ -162,11 +172,20 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ author, text, timestamp, imag
   return (
     <div className={`chat-message ${isOwn ? 'own' : ''}`}>
       <div className="message-avatar" style={{ backgroundColor: avatarColor }}>
-        {avatarText}
+        {isOwn && avatarUrl ? (
+          <img src={avatarUrl} alt="头像" />
+        ) : (
+          avatarText
+        )}
       </div>
       <div className="message-body">
         <div className="message-header">
-          <span className="message-author">{author === '匿名' ? '匿名用户' : author}</span>
+          <span
+            className="message-author"
+            style={nicknameColor && !isOwn ? { color: nicknameColor } : undefined}
+          >
+            {author === '匿名' ? '匿名用户' : author}
+          </span>
           <span className="message-time" title={formatFullTime(timestamp)}>
             {formatTime(timestamp)}
           </span>

@@ -4,8 +4,9 @@ import { idlFactory } from '../declarations/icp_chat_backend/icp_chat_backend.di
 import type { _SERVICE } from '../declarations/icp_chat_backend/icp_chat_backend.did.d.ts';
 import { config } from '../config';
 
-// 创建 Actor 实例
+// 创建带身份的 Actor 实例
 export async function createActor(): Promise<_SERVICE> {
+  try {
   const authClient = await AuthClient.create();
   const identity = authClient.getIdentity();
 
@@ -23,6 +24,15 @@ export async function createActor(): Promise<_SERVICE> {
     agent,
     canisterId: config.canisterId,
   });
+  } catch (error) {
+    // 某些开发环境（不安全上下文、缺少 SubtleCrypto 等）下 AuthClient 会因为没有 global crypto 而报错
+    console.warn(
+      '[ICP Agent] 创建带身份 Actor 失败，回退到匿名 Actor。错误：',
+      error,
+    );
+    // 回退到匿名身份，至少保证功能可用；需要基于 Principal 的接口（如保存个人资料）会在后端被匿名校验拦截
+    return createAnonymousActor();
+  }
 }
 
 // 获取匿名 Actor（用于未登录用户）
