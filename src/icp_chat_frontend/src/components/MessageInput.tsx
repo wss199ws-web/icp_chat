@@ -1,6 +1,7 @@
 import React, { useState, KeyboardEvent, useRef, useEffect } from 'react';
 import './MessageInput.css';
 import { chatService } from '../services/chatService';
+import EmojiPicker from './EmojiPicker';
 
 interface MessageInputProps {
   onSend: (text: string, imageId?: number | null) => void;
@@ -18,7 +19,9 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [detectedBase64, setDetectedBase64] = useState<{ dataUrl: string; mimeType: string } | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const MAX_LENGTH = 1000;
   const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -172,6 +175,97 @@ const MessageInput: React.FC<MessageInputProps> = ({
     }
   };
 
+  // 处理表情选择
+  const handleEmojiSelect = (emoji: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      // 如果没有焦点，直接追加到末尾
+      setText((prev) => prev + emoji);
+      return;
+    }
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const currentText = text;
+    const newText = currentText.substring(0, start) + emoji + currentText.substring(end);
+    
+    setText(newText);
+    
+    // 设置光标位置到插入表情后
+    setTimeout(() => {
+      textarea.focus();
+      const newCursorPos = start + emoji.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 0);
+  };
+
+  // 处理网络表情包选择：将图片 URL 转换为 base64 并插入（已废弃，保留用于兼容）
+  const handleStickerSelect = async (imageUrl: string) => {
+    try {
+      // 如果已经是 base64 格式，直接插入
+      if (imageUrl.startsWith('data:image/')) {
+        handleEmojiSelect(imageUrl);
+        return;
+      }
+
+      // 否则，从 URL 加载图片并转换为 base64
+      const response = await fetch(imageUrl, { mode: 'cors' });
+      if (!response.ok) {
+        throw new Error('图片加载失败');
+      }
+      const blob = await response.blob();
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        handleEmojiSelect(base64); // 将 base64 图片插入到文本中
+      };
+      reader.onerror = () => {
+        console.error('转换图片失败');
+        alert('表情包加载失败，请稍后重试');
+      };
+      reader.readAsDataURL(blob);
+    } catch (error) {
+      console.error('加载表情包失败:', error);
+      alert('表情包加载失败，请检查网络连接');
+    }
+  };
+
+  // 处理直接发送表情包图片：将 base64 转换为 Blob 并上传发送
+  const handleSendSticker = async (imageBase64: string) => {
+    if (disabled || uploading) return;
+
+    try {
+      setUploading(true);
+      
+      // 将 base64 转换为 Blob
+      const blob = dataURLtoBlob(imageBase64);
+      if (!blob) {
+        alert('图片格式错误');
+        setUploading(false);
+        return;
+      }
+
+      // 上传图片
+      const result = await chatService.uploadImage(blob);
+      if (result.success && result.imageId !== undefined) {
+        // 直接发送，不填充文本
+        onSend('', result.imageId);
+      } else {
+        alert(result.error || '图片上传失败');
+      }
+    } catch (error) {
+      console.error('发送表情包失败:', error);
+      alert('发送表情包失败，请重试');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // 切换表情选择器显示
+  const toggleEmojiPicker = () => {
+    setShowEmojiPicker((prev) => !prev);
+  };
+
   const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
     if (disabled || uploading) return;
     const clipboardData = event.clipboardData;
@@ -199,6 +293,14 @@ const MessageInput: React.FC<MessageInputProps> = ({
   return (
     <div className="message-input-container">
       <div className="input-wrapper">
+        {showEmojiPicker && (
+          <EmojiPicker
+            onSelect={handleEmojiSelect}
+            onSelectImage={handleStickerSelect}
+            onSendImage={handleSendSticker}
+            onClose={() => setShowEmojiPicker(false)}
+          />
+        )}
         {imagePreview && (
           <div className="image-preview">
             <img src={imagePreview} alt="预览" />
@@ -214,6 +316,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
           </div>
         )}
         <textarea
+          ref={textareaRef}
           className="message-input"
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -226,6 +329,15 @@ const MessageInput: React.FC<MessageInputProps> = ({
         />
         <div className="input-footer">
           <div className="input-actions">
+            <button
+              className="emoji-btn"
+              onClick={toggleEmojiPicker}
+              disabled={disabled || uploading}
+              title="表情"
+              type="button"
+            >
+              😊
+            </button>
             <input
               ref={fileInputRef}
               type="file"

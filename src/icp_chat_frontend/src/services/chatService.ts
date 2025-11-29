@@ -333,7 +333,7 @@ class ChatService {
           senderPrincipal: senderPrincipalValue,
           authorAvatar: authorAvatarValue,
           authorColor: authorColorValue,
-          text: decryptedText,
+            text: decryptedText,
           timestamp: msg.timestamp,
           imageId: imageIdValue,
         };
@@ -396,7 +396,7 @@ class ChatService {
           senderPrincipal: senderPrincipalValue,
           authorAvatar: authorAvatarValue,
           authorColor: authorColorValue,
-          text: decryptedText,
+            text: decryptedText,
           timestamp: msg.timestamp,
           imageId: imageIdValue,
         };

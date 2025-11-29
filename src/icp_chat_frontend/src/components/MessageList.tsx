@@ -131,14 +131,14 @@ const MessageList: React.FC<MessageListProps> = ({
           : message.author;
         
         return (
-          <ChatMessage
-            key={message.id}
-            {...message}
+        <ChatMessage
+          key={message.id}
+          {...message}
             author={displayAuthor}
             isOwn={isOwnMessage}
             avatarUrl={displayAvatar}
             nicknameColor={displayColor}
-          />
+        />
         );
       })}
       <div ref={messagesEndRef} />
