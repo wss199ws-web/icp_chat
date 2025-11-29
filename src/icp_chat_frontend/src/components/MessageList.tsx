@@ -99,7 +99,11 @@ const MessageList: React.FC<MessageListProps> = ({
     <div className="message-list" ref={listRef} onScroll={handleScroll}>
       {hasMore && (
         <div className="load-more-indicator">
-          {isLoadingMore ? '加载历史消息中...' : '上滑加载更多消息'}
+          {isLoadingMore ? (
+            <div className="load-more-spinner" aria-label="加载历史消息中" />
+          ) : (
+            '上滑加载更多消息'
+          )}
         </div>
       )}
       {messages.map((message) => (

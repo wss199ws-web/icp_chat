@@ -7,22 +7,87 @@ import { encryptionService } from '../services/encryptionService';
 import '../App.css';
 
 const PAGE_SIZE = 10;
+const LOCAL_STORAGE_KEY = 'icp-chat-cache-v1';
+
+interface CachedChatState {
+  messages: Message[];
+  messageCount: number;
+  currentPage: number;
+  hasMoreMessages: boolean;
+  timestamp: number;
+}
+
+const loadCachedState = (): CachedChatState | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const cached = window.localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (!cached) {
+      return null;
+    }
+    const parsed = JSON.parse(cached) as CachedChatState;
+    if (!Array.isArray(parsed.messages)) {
+      return null;
+    }
+    return parsed;
+  } catch (e) {
+    console.warn('读取本地聊天缓存失败:', e);
+    return null;
+  }
+};
+
+const saveCachedState = (state: CachedChatState) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.warn('写入本地聊天缓存失败:', e);
+  }
+};
 
 const Chat: React.FC = () => {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(true);
+  // 首次渲染时同步读取一次本地缓存，用于初始化各个 state，保证页面一进来就有数据
+  const initialCachedState: CachedChatState | null =
+    typeof window !== 'undefined' ? loadCachedState() : null;
+
+  const [messages, setMessages] = useState<Message[]>(() => initialCachedState?.messages ?? []);
+  const [loading, setLoading] = useState<boolean>(() => !initialCachedState);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [messageCount, setMessageCount] = useState(0);
+  const [messageCount, setMessageCount] = useState(
+    () => initialCachedState?.messageCount ?? 0,
+  );
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [encryptionAvailable, setEncryptionAvailable] = useState<boolean>(false);
   const [showKeyManagement, setShowKeyManagement] = useState<boolean>(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [currentPage, setCurrentPage] = useState(
+    () => initialCachedState?.currentPage ?? 1,
+  );
+  const [hasMoreMessages, setHasMoreMessages] = useState(
+    () => initialCachedState?.hasMoreMessages ?? false,
+  );
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
+
+  // 将当前聊天状态保存到本地缓存
+  useEffect(() => {
+    if (!messages.length) {
+      return;
+    }
+    saveCachedState({
+      messages,
+      messageCount,
+      currentPage,
+      hasMoreMessages,
+      timestamp: Date.now(),
+    });
+  }, [messages, messageCount, currentPage, hasMoreMessages]);
 
   // 加载最新一页消息
   const loadLatestMessages = useCallback(async () => {
@@ -65,6 +130,7 @@ const Chat: React.FC = () => {
     const init = async () => {
       try {
         await chatService.initialize();
+        // 如果已经从缓存渲染过一版，这里作为一次静默同步；否则仍然是首屏加载
         await loadLatestMessages();
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : '未知错误';
@@ -79,7 +145,8 @@ const Chat: React.FC = () => {
         setError(userMessage);
         console.error('初始化失败:', err);
       } finally {
-        setLoading(false);
+        // 仅当仍处于加载状态时才更新 loading，避免覆盖缓存恢复时的状态
+        setLoading((prev) => (prev ? false : prev));
       }
     };
 
@@ -209,11 +276,12 @@ const Chat: React.FC = () => {
     }
   };
 
-  if (loading) {
+  // 如果没有缓存且正在首屏加载数据，用 loading 覆盖主界面，避免看到空白/空状态闪烁
+  if (loading && messages.length === 0) {
     return (
       <div className="app-loading">
         <div className="loading-spinner"></div>
-        <p>正在连接 ICP 网络...</p>
+        <p>正在加载历史消息...</p>
       </div>
     );
   }
