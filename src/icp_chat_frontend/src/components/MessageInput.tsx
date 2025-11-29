@@ -2,17 +2,20 @@ import React, { useState, KeyboardEvent, useRef, useEffect } from 'react';
 import './MessageInput.css';
 import { chatService } from '../services/chatService';
 import EmojiPicker from './EmojiPicker';
+import UserMention, { User } from './UserMention';
 
 interface MessageInputProps {
   onSend: (text: string, imageId?: number | null) => void;
   disabled?: boolean;
   placeholder?: string;
+  users?: User[]; // 用户列表，用于 @ 功能
 }
 
 const MessageInput: React.FC<MessageInputProps> = ({
   onSend,
   disabled = false,
   placeholder = '输入消息...',
+  users = [],
 }) => {
   const [text, setText] = useState('');
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
@@ -20,8 +23,12 @@ const MessageInput: React.FC<MessageInputProps> = ({
   const [uploading, setUploading] = useState(false);
   const [detectedBase64, setDetectedBase64] = useState<{ dataUrl: string; mimeType: string } | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showUserMention, setShowUserMention] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionPosition, setMentionPosition] = useState<{ start: number; end: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mentionRef = useRef<HTMLDivElement>(null);
   const MAX_LENGTH = 1000;
   const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -45,6 +52,81 @@ const MessageInput: React.FC<MessageInputProps> = ({
     const base64Image = detectBase64Image(text);
     setDetectedBase64(base64Image);
   }, [text]);
+
+  // 检测 @ 符号并显示用户列表
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const cursorPos = textarea.selectionStart;
+    const textBeforeCursor = text.substring(0, cursorPos);
+    
+    // 查找最后一个 @ 符号
+    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+    
+    if (lastAtIndex !== -1) {
+      // 检查 @ 后面是否有空格或其他分隔符（如果有，说明 @ 已经完成）
+      const afterAt = textBeforeCursor.substring(lastAtIndex + 1);
+      const hasSpaceOrNewline = /[\s\n]/.test(afterAt);
+      
+      if (!hasSpaceOrNewline) {
+        // 提取 @ 后面的查询文本
+        const query = afterAt;
+        setMentionQuery(query);
+        setMentionPosition({ start: lastAtIndex, end: cursorPos });
+        setShowUserMention(true);
+        return;
+      }
+    }
+    
+    // 如果没有找到有效的 @，隐藏用户列表
+    setShowUserMention(false);
+    setMentionQuery('');
+    setMentionPosition(null);
+  }, [text]);
+
+  // 点击外部关闭用户列表
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        mentionRef.current &&
+        !mentionRef.current.contains(event.target as Node) &&
+        textareaRef.current &&
+        !textareaRef.current.contains(event.target as Node)
+      ) {
+        setShowUserMention(false);
+      }
+    };
+
+    if (showUserMention) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showUserMention]);
+
+  // 处理用户选择
+  const handleUserSelect = (user: User) => {
+    const textarea = textareaRef.current;
+    if (!textarea || !mentionPosition) return;
+
+    const beforeMention = text.substring(0, mentionPosition.start);
+    const afterMention = text.substring(mentionPosition.end);
+    const newText = `${beforeMention}@${user.nickname} ${afterMention}`;
+    
+    setText(newText);
+    setShowUserMention(false);
+    setMentionQuery('');
+    setMentionPosition(null);
+
+    // 设置光标位置到 @用户名 后面
+    setTimeout(() => {
+      textarea.focus();
+      const newCursorPos = mentionPosition.start + user.nickname.length + 2; // +2 for @ and space
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 0);
+  };
 
   const handleImageFile = (file: File | null) => {
     if (!file) return false;
@@ -292,13 +374,21 @@ const MessageInput: React.FC<MessageInputProps> = ({
 
   return (
     <div className="message-input-container">
-      <div className="input-wrapper">
+      <div className="input-wrapper" ref={mentionRef}>
         {showEmojiPicker && (
           <EmojiPicker
             onSelect={handleEmojiSelect}
             onSelectImage={handleStickerSelect}
             onSendImage={handleSendSticker}
             onClose={() => setShowEmojiPicker(false)}
+          />
+        )}
+        {showUserMention && users.length > 0 && (
+          <UserMention
+            users={users}
+            onSelect={handleUserSelect}
+            onClose={() => setShowUserMention(false)}
+            searchQuery={mentionQuery}
           />
         )}
         {imagePreview && (

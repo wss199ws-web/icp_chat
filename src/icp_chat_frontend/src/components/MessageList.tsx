@@ -11,6 +11,7 @@ interface MessageListProps {
   ownAvatar?: string | null;
   ownColor?: string | null;
   clientId?: string;
+  scrollToMessageId?: number | null; // 要滚动到的消息 ID
 }
 
 const TOP_THRESHOLD = 60;
@@ -24,9 +25,11 @@ const MessageList: React.FC<MessageListProps> = ({
   ownAvatar,
   ownColor,
   clientId,
+  scrollToMessageId,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const messageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const isAtBottomRef = useRef(true);
   const prevScrollHeightRef = useRef<number | null>(null);
   const prevScrollTopRef = useRef<number | null>(null);
@@ -90,6 +93,23 @@ const MessageList: React.FC<MessageListProps> = ({
     }
   }, [messages, isLoadingMore]);
 
+  // 滚动到指定消息
+  useEffect(() => {
+    if (scrollToMessageId !== undefined && scrollToMessageId !== null) {
+      const messageEl = messageRefs.current.get(scrollToMessageId);
+      if (messageEl && listRef.current) {
+        // 高亮消息
+        messageEl.classList.add('message-highlighted');
+        setTimeout(() => {
+          messageEl.classList.remove('message-highlighted');
+        }, 2000);
+
+        // 滚动到消息位置
+        messageEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [scrollToMessageId]);
+
   if (messages.length === 0) {
     return (
       <div className="message-list empty">
@@ -133,6 +153,13 @@ const MessageList: React.FC<MessageListProps> = ({
         return (
         <ChatMessage
           key={message.id}
+          ref={(el) => {
+            if (el) {
+              messageRefs.current.set(message.id, el);
+            } else {
+              messageRefs.current.delete(message.id);
+            }
+          }}
           {...message}
             author={displayAuthor}
             isOwn={isOwnMessage}

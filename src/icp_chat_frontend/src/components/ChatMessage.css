@@ -103,6 +103,30 @@
   margin-bottom: 8px;
 }
 
+/* @ 用户高亮样式 */
+.message-mention {
+  color: #459cd1;
+  font-weight: 600;
+  background: rgba(69, 156, 209, 0.1);
+  padding: 2px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.message-mention:hover {
+  background: rgba(69, 156, 209, 0.2);
+}
+
+.chat-message.own .message-mention {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.chat-message.own .message-mention:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
 .decrypt-error {
   display: inline-flex;
   align-items: center;

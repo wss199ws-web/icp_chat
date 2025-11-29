@@ -44,7 +44,8 @@ const getAvatarText = (name: string): string => {
   return firstChar.toUpperCase();
 };
 
-const ChatMessage: React.FC<ChatMessageProps> = ({
+const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(({
+  id,
   author,
   authorAvatar,
   authorColor,
@@ -54,7 +55,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
   isOwn = false,
   avatarUrl,
   nicknameColor,
-}) => {
+}, ref) => {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
@@ -179,7 +180,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
   const displayColor = authorColor || nicknameColor;
 
   return (
-    <div className={`chat-message ${isOwn ? 'own' : ''}`}>
+    <div ref={ref} className={`chat-message ${isOwn ? 'own' : ''}`} data-message-id={id}>
       <div className="message-avatar" style={{ backgroundColor: avatarColor }}>
         {displayAvatar ? <img src={displayAvatar} alt="头像" /> : avatarText}
       </div>
@@ -203,7 +204,37 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
                   🔒 无法解密此消息
                 </span>
               ) : (
-                displayText
+                // 高亮显示 @ 的用户名
+                (() => {
+                  // 匹配 @用户名 格式
+                  const mentionRegex = /@([^\s@]+)/g;
+                  const parts: (string | JSX.Element)[] = [];
+                  let lastIndex = 0;
+                  let match;
+                  
+                  while ((match = mentionRegex.exec(displayText)) !== null) {
+                    // 添加 @ 之前的文本
+                    if (match.index > lastIndex) {
+                      parts.push(displayText.substring(lastIndex, match.index));
+                    }
+                    
+                    // 添加高亮的 @用户名
+                    parts.push(
+                      <span key={match.index} className="message-mention">
+                        @{match[1]}
+                      </span>
+                    );
+                    
+                    lastIndex = mentionRegex.lastIndex;
+                  }
+                  
+                  // 添加剩余的文本
+                  if (lastIndex < displayText.length) {
+                    parts.push(displayText.substring(lastIndex));
+                  }
+                  
+                  return parts.length > 0 ? parts : displayText;
+                })()
               )}
             </div>
           )}
@@ -253,7 +284,9 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
       </div>
     </div>
   );
-};
+});
+
+ChatMessage.displayName = 'ChatMessage';
 
 export default ChatMessage;
 

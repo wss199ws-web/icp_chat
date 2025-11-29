@@ -3,6 +3,7 @@ import { chatService, Message } from '../services/chatService';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import KeyManagement from './KeyManagement';
+import MentionNotification from './MentionNotification';
 import { encryptionService } from '../services/encryptionService';
 import { userProfileService } from '../services/userProfileService';
 import { getClientId } from '../services/clientIdentity';
@@ -78,6 +79,8 @@ const Chat: React.FC = () => {
     () => initialCachedState?.hasMoreMessages ?? false,
   );
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [mentionNotifications, setMentionNotifications] = useState<Array<{ messageId: number; author: string; text: string }>>([]);
+  const [scrollToMessageId, setScrollToMessageId] = useState<number | null>(null);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
 
@@ -95,18 +98,56 @@ const Chat: React.FC = () => {
     });
   }, [messages, messageCount, currentPage, hasMoreMessages]);
 
+  // 检测消息中是否@了当前用户
+  const checkMentions = useCallback((newMessages: Message[]) => {
+    if (!currentUser) return;
+
+    newMessages.forEach((msg) => {
+      // 检查消息文本中是否包含 @当前用户昵称
+      if (msg.text && msg.text.includes(`@${currentUser}`)) {
+        // 检查是否已经显示过这个通知
+        setMentionNotifications((prev) => {
+          const alreadyNotified = prev.some((n) => n.messageId === msg.id);
+          if (!alreadyNotified && msg.author !== currentUser) {
+            return [
+              ...prev,
+              {
+                messageId: msg.id,
+                author: msg.author,
+                text: msg.text,
+              },
+            ];
+          }
+          return prev;
+        });
+      }
+    });
+  }, [currentUser]);
+
   // 加载最新一页消息
   const loadLatestMessages = useCallback(async () => {
     try {
       const pageData = await chatService.getMessagesPage(1, PAGE_SIZE);
-      setMessages(pageData.messages);
+      setMessages((prevMessages) => {
+        // 检测新消息中的@
+        const newMessages = pageData.messages.filter(
+          (newMsg) => !prevMessages.some((oldMsg) => oldMsg.id === newMsg.id)
+        );
+        if (newMessages.length > 0 && currentUser) {
+          // 使用 setTimeout 确保状态更新后再检测
+          setTimeout(() => {
+            checkMentions(newMessages);
+          }, 100);
+        }
+        return pageData.messages;
+      });
       setMessageCount(pageData.total);
       setCurrentPage(1);
       setHasMoreMessages(pageData.totalPages > 1);
     } catch (err) {
       console.error('加载消息失败:', err);
     }
-  }, []);
+  }, [currentUser, checkMentions]);
 
   // 加载当前用户的个人资料（用于头像等）
   useEffect(() => {
@@ -305,6 +346,9 @@ const Chat: React.FC = () => {
           setCurrentUser(author);
         }
 
+        // 检测新发送的消息是否@了其他用户（虽然是自己发的，但可以用于测试）
+        // 注意：自己@自己不会显示通知
+
         // 当前窗口发送成功后，通知其他窗口刷新
         if (broadcastChannelRef.current) {
           broadcastChannelRef.current.postMessage({ type: 'NEW_MESSAGE' });
@@ -406,10 +450,54 @@ const Chat: React.FC = () => {
           ownAvatar={currentUserAvatar}
           ownColor={currentUserColor}
           clientId={clientIdRef.current}
+          scrollToMessageId={scrollToMessageId}
         />
 
-        <MessageInput onSend={handleSendMessage} disabled={sending} />
+        <MessageInput 
+          onSend={handleSendMessage} 
+          disabled={sending}
+          users={(() => {
+            // 从消息中提取用户列表（去重）
+            const userMap = new Map<string, { nickname: string; senderId: string; avatar?: string | null; color?: string | null }>();
+            messages.forEach((msg) => {
+              if (msg.author && msg.author !== '匿名' && msg.senderId) {
+                if (!userMap.has(msg.senderId)) {
+                  userMap.set(msg.senderId, {
+                    nickname: msg.author,
+                    senderId: msg.senderId,
+                    avatar: msg.authorAvatar || null,
+                    color: msg.authorColor || null,
+                  });
+                }
+              }
+            });
+            return Array.from(userMap.values());
+          })()}
+        />
       </div>
+      
+      {/* @ 通知 */}
+      {mentionNotifications.map((notification, index) => (
+        <MentionNotification
+          key={`${notification.messageId}-${index}`}
+          messageId={notification.messageId}
+          author={notification.author}
+          text={notification.text}
+          onJumpToMessage={(messageId) => {
+            setScrollToMessageId(messageId);
+            // 清除该通知
+            setMentionNotifications((prev) =>
+              prev.filter((n) => n.messageId !== messageId)
+            );
+          }}
+          onDismiss={() => {
+            setMentionNotifications((prev) =>
+              prev.filter((n) => n.messageId !== notification.messageId)
+            );
+          }}
+        />
+      ))}
+      
       {showKeyManagement && (
         <KeyManagement onClose={() => setShowKeyManagement(false)} />
       )}

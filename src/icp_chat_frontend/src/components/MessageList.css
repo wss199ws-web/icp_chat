@@ -63,3 +63,28 @@
   animation: spin 0.8s linear infinite;
 }
 
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 消息高亮动画 */
+.message-highlighted {
+  animation: highlightMessage 2s ease-out;
+}
+
+@keyframes highlightMessage {
+  0% {
+    background: rgba(69, 156, 209, 0.3);
+    transform: scale(1.02);
+  }
+  100% {
+    background: transparent;
+    transform: scale(1);
+  }
+}
+
