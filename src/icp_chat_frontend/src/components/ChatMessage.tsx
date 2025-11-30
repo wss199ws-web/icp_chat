@@ -82,7 +82,6 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(({
   const [actionMenuPosition, setActionMenuPosition] = useState({ x: 0, y: 0 });
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const hideMenuTimerRef = useRef<NodeJS.Timeout | null>(null);
   const messageRef = useRef<HTMLDivElement | null>(null);
   const messageBodyRef = useRef<HTMLDivElement | null>(null);
   const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -226,58 +225,82 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(({
     setAvatarError(false);
   }, [displayAvatar]);
 
-  // 处理鼠标悬停显示操作菜单（在 message-body 上）
-  const handleMouseEnter = () => {
-    // 清除可能存在的隐藏定时器
-    if (hideMenuTimerRef.current) {
-      clearTimeout(hideMenuTimerRef.current);
-      hideMenuTimerRef.current = null;
+  // 处理 PC 端点击消息内容显示操作菜单（和移动端一致）
+  const handleMessageBodyClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // 如果点击的是图片、链接或其他交互元素，不处理
+    const target = e.target as HTMLElement;
+    if (target.closest('.message-image-clickable') || 
+        target.closest('.message-mention') ||
+        target.closest('a') ||
+        target.closest('.message-action-menu')) {
+      return;
     }
-    if (messageRef.current) {
-      const rect = messageRef.current.getBoundingClientRect();
-      // 菜单显示在消息上方，居中对齐，更靠近消息框
-      setActionMenuPosition({
-        x: rect.left + rect.width / 2, // 消息中心
-        y: rect.top - 35, // 消息上方，更近（留出一点空间让鼠标移入）
-      });
+    
+    if (!onReply || !messageBodyRef.current) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // 使用 requestAnimationFrame 确保 DOM 完全渲染后再计算位置
+    requestAnimationFrame(() => {
+      if (!messageBodyRef.current) return;
+      
+      const bodyRect = messageBodyRef.current.getBoundingClientRect();
+      
+      // 查找 message-content 元素，获取实际消息内容的左边缘位置
+      const messageContent = messageBodyRef.current.querySelector('.message-content') as HTMLElement;
+      let contentLeft = bodyRect.left;
+      
+      if (messageContent) {
+        const contentRect = messageContent.getBoundingClientRect();
+        contentLeft = contentRect.left;
+      } else {
+        // 如果没有找到 message-content，使用 message-body 的 left + 左 padding (10px)
+        contentLeft = bodyRect.left + 10;
+      }
+      
+      // 计算操作菜单位置：在 message-body 正上方，与消息内容左对齐
+      // MessageActionMenu 宽度约 280px，高度约 50px
+      const menuWidth = 280;
+      const menuHeight = 50;
+      const spacing = 8; // 与消息的间距
+      
+      // 计算位置：在 message-body 正上方，与消息内容左对齐
+      let x = contentLeft; // 与消息内容左对齐
+      let y = bodyRect.top - menuHeight - spacing; // 显示在消息正上方
+      
+      // 获取视口尺寸
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      
+      // 确保不超出视口左边界
+      if (x < 10) {
+        x = 10;
+      }
+      
+      // 确保不超出视口右边界
+      if (x + menuWidth > viewportWidth - 10) {
+        x = viewportWidth - menuWidth - 10;
+      }
+      
+      // 如果上方空间不够，显示在消息下方
+      if (y < 10) {
+        y = bodyRect.bottom + spacing;
+      }
+      
+      // 确保不超出视口下边界
+      if (y + menuHeight > viewportHeight - 10) {
+        y = viewportHeight - menuHeight - 10;
+      }
+      
+      setActionMenuPosition({ x, y });
       setShowActionMenu(true);
-    }
+    });
   };
 
-  const handleMouseLeave = (e: React.MouseEvent<HTMLDivElement>) => {
-    // 检查鼠标是否移到了操作菜单上
-    const relatedTarget = e.relatedTarget as HTMLElement;
-    if (relatedTarget) {
-      if (relatedTarget.closest('.message-action-menu') || 
-          relatedTarget.closest('.message-tooltip') || 
-          relatedTarget.closest('.message-more-button')) {
-        // 清除可能存在的隐藏定时器
-        if (hideMenuTimerRef.current) {
-          clearTimeout(hideMenuTimerRef.current);
-          hideMenuTimerRef.current = null;
-        }
-        return; // 如果移到了菜单、tooltip 或按钮上，不隐藏
-      }
-    }
-    // 延迟隐藏，给鼠标时间移入菜单
-    hideMenuTimerRef.current = setTimeout(() => {
-      // 再次检查鼠标是否在菜单上
-      const menuElement = document.querySelector('.message-action-menu');
-      if (menuElement && menuElement.matches(':hover')) {
-        return; // 鼠标在菜单上，不隐藏
-      }
-      // 如果 tooltip 没有显示，则隐藏操作菜单
-      if (!showTooltip) {
-        setShowActionMenu(false);
-      }
-      hideMenuTimerRef.current = null;
-    }, 150);
-  };
-
-  // 处理操作菜单中的回复按钮 - 直接显示回复框，不显示面板
+  // 处理操作菜单中的回复按钮
   const handleActionMenuReply = () => {
     if (onReply) {
-      // 直接调用回复回调，不显示 tooltip
       onReply(id, author, text);
       setShowActionMenu(false);
     }
@@ -401,8 +424,7 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(({
       <div 
         ref={messageBodyRef}
         className="message-body"
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
+        onClick={handleMessageBodyClick}
       >
         {showActionMenu && (
           <MessageActionMenu

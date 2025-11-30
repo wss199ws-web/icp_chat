@@ -22,14 +22,13 @@ const MessageActionMenu: React.FC<MessageActionMenuProps> = ({
     if (menuRef.current) {
       const rect = menuRef.current.getBoundingClientRect();
       const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
 
       let x = position.x;
       let y = position.y;
-
-      // 水平居中调整
-      x = x - rect.width / 2;
-
-      // 如果超出左边界，向右调整
+      x = x + rect.width / 2;
+      y = y + rect.height / 2;
+      // 确保不超出左边界
       if (x < 10) {
         x = 10;
       }
@@ -42,6 +41,11 @@ const MessageActionMenu: React.FC<MessageActionMenuProps> = ({
       // 如果超出上边界，向下调整
       if (y < 10) {
         y = 10;
+      }
+
+      // 如果超出下边界，向上调整
+      if (y + rect.height > viewportHeight - 10) {
+        y = viewportHeight - rect.height - 10;
       }
 
       setAdjustedPosition({ x, y });
