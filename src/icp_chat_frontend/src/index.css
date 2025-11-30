@@ -26,7 +26,8 @@ body {
   padding: 20px;
   /* 移动端优化 */
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
+  /* 允许滚动，但防止双击缩放 */
+  touch-action: pan-x pan-y pinch-zoom;
 }
 
 #root {

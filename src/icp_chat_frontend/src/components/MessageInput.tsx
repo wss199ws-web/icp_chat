@@ -3,6 +3,7 @@ import './MessageInput.css';
 import { chatService } from '../services/chatService';
 import EmojiPicker from './EmojiPicker';
 import UserMention, { User } from './UserMention';
+import { compressImage, compressImageToDataURL } from '../utils/imageCompression';
 
 interface MessageInputProps {
   onSend: (text: string, imageId?: number | null) => void;
@@ -135,7 +136,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
     }, 0);
   };
 
-  const handleImageFile = (file: File | null) => {
+  const handleImageFile = async (file: File | null) => {
     if (!file) return false;
 
     if (!file.type.startsWith('image/')) {
@@ -148,19 +149,34 @@ const MessageInput: React.FC<MessageInputProps> = ({
       return false;
     }
 
-    setSelectedImage(file);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setImagePreview(reader.result as string);
-    };
-    reader.readAsDataURL(file);
-    return true;
+    try {
+      // 如果图片超过2MB，先压缩
+      let processedFile = file;
+      if (file.size > 2 * 1024 * 1024) {
+        console.log('[MessageInput] 图片超过2MB，开始压缩...');
+        const compressedBlob = await compressImage(file);
+        processedFile = new File([compressedBlob], file.name, { type: file.type });
+        console.log(`[MessageInput] 压缩完成，原始: ${(file.size / 1024 / 1024).toFixed(2)}MB -> ${(processedFile.size / 1024 / 1024).toFixed(2)}MB`);
+      }
+
+      setSelectedImage(processedFile);
+      
+      // 生成预览（使用压缩后的图片）
+      const previewDataUrl = await compressImageToDataURL(processedFile);
+      setImagePreview(previewDataUrl);
+      
+      return true;
+    } catch (error) {
+      console.error('[MessageInput] 图片处理失败:', error);
+      alert('图片处理失败，请重试');
+      return false;
+    }
   };
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    handleImageFile(file);
+    await handleImageFile(file);
   };
 
   const removeImage = () => {
@@ -204,7 +220,16 @@ const MessageInput: React.FC<MessageInputProps> = ({
       if (blob) {
         setUploading(true);
         try {
-          const result = await chatService.uploadImage(blob);
+          // 如果图片超过2MB，先压缩
+          let processedBlob = blob;
+          if (blob.size > 2 * 1024 * 1024) {
+            console.log('[MessageInput] Base64图片超过2MB，开始压缩...');
+            const file = new File([blob], 'image.jpg', { type: blob.type || 'image/jpeg' });
+            processedBlob = await compressImage(file);
+            console.log(`[MessageInput] 压缩完成，原始: ${(blob.size / 1024 / 1024).toFixed(2)}MB -> ${(processedBlob.size / 1024 / 1024).toFixed(2)}MB`);
+          }
+          
+          const result = await chatService.uploadImage(processedBlob);
           if (result.success && result.imageId !== undefined) {
             imageId = result.imageId;
             // 从文本中移除 base64 数据，只保留其他文本
@@ -223,7 +248,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
       }
     }
 
-    // 如果有选中的图片，先上传
+    // 如果有选中的图片，先上传（已经压缩过了）
     if (selectedImage) {
       setUploading(true);
       try {
@@ -295,7 +320,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
     setShowEmojiPicker((prev) => !prev);
   };
 
-  const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+  const handlePaste = async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
     if (disabled || uploading) return;
     const clipboardData = event.clipboardData;
     if (!clipboardData) return;
@@ -308,7 +333,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
       if (file) {
         event.preventDefault(); // 阻止默认插入行为
         const textData = clipboardData.getData('text');
-        handleImageFile(file);
+        await handleImageFile(file);
         if (textData) {
           setText((prev) => prev + textData);
         }
@@ -339,6 +364,25 @@ const MessageInput: React.FC<MessageInputProps> = ({
           </div>
         </div>
       )}
+      {/* 图片预览 - 在输入框上方 */}
+      {imagePreview && (
+        <div className="image-preview-wrapper">
+          <div className="image-preview">
+            <img src={imagePreview} alt="预览" />
+            <button className="remove-image-btn" onClick={removeImage} disabled={disabled || uploading}>
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+      {detectedBase64 && !imagePreview && (
+        <div className="image-preview-wrapper">
+          <div className="image-preview base64-detected">
+            <img src={detectedBase64.dataUrl} alt="检测到的图片" />
+            <div className="base64-hint">检测到图片，发送时将自动上传</div>
+          </div>
+        </div>
+      )}
       <div className="message-input-container">
         <div className="input-wrapper" ref={mentionRef}>
           {showEmojiPicker && (
@@ -354,20 +398,6 @@ const MessageInput: React.FC<MessageInputProps> = ({
               onClose={() => setShowUserMention(false)}
               searchQuery={mentionQuery}
             />
-          )}
-          {imagePreview && (
-            <div className="image-preview">
-              <img src={imagePreview} alt="预览" />
-              <button className="remove-image-btn" onClick={removeImage} disabled={disabled || uploading}>
-                ×
-              </button>
-            </div>
-          )}
-          {detectedBase64 && !imagePreview && (
-            <div className="image-preview base64-detected">
-              <img src={detectedBase64.dataUrl} alt="检测到的图片" />
-              <div className="base64-hint">检测到图片，发送时将自动上传</div>
-            </div>
           )}
           <textarea
           ref={textareaRef}

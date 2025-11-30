@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import './KeyManagement.css';
 import { userProfileService, type UserProfile as Profile } from '../services/userProfileService';
+import { compressImageToDataURL } from '../utils/imageCompression';
 
 const UserProfile: React.FC = () => {
   const [profile, setProfile] = useState<Profile>({
@@ -45,7 +46,7 @@ const UserProfile: React.FC = () => {
   }, []);
 
   // 头像本地上传处理：读取为 data URL，用于圆形预览 & 持久化存储
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -54,21 +55,39 @@ const UserProfile: React.FC = () => {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result === 'string') {
+    try {
+      // 如果图片超过2MB，先压缩
+      if (file.size > 2 * 1024 * 1024) {
+        console.log('[UserProfile] 头像图片超过2MB，开始压缩...');
+        const compressedBlob = await compressImageToDataURL(file);
         setProfile((prev) => ({
           ...prev,
-          avatar: result,
+          avatar: compressedBlob,
         }));
         setError(null);
+        console.log(`[UserProfile] 压缩完成，原始: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+      } else {
+        // 小于2MB，直接读取
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result;
+          if (typeof result === 'string') {
+            setProfile((prev) => ({
+              ...prev,
+              avatar: result,
+            }));
+            setError(null);
+          }
+        };
+        reader.onerror = () => {
+          setError('读取头像文件失败，请重试');
+        };
+        reader.readAsDataURL(file);
       }
-    };
-    reader.onerror = () => {
-      setError('读取头像文件失败，请重试');
-    };
-    reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('[UserProfile] 头像处理失败:', error);
+      setError('头像处理失败，请重试');
+    }
   };
 
   const handleChange =

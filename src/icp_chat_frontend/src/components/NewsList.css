@@ -4,6 +4,16 @@
   padding: 24px;
   min-height: 100vh;
   background: #f5f5f5;
+  /* 确保可以滚动 */
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y pan-x; /* 允许垂直和水平滚动 */
+  height: 100%;
+  /* 确保可以接收触摸事件 */
+  pointer-events: auto;
+  /* 防止父元素的 touch-action 影响 */
+  -webkit-touch-callout: none;
 }
 
 .news-header {
@@ -216,6 +226,17 @@
 @media (max-width: 768px) {
   .news-list-container {
     padding: 16px;
+    /* 移动端确保可以滚动 */
+    overflow-y: auto !important;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch !important; /* iOS 平滑滚动 */
+    touch-action: pan-y pan-x !important; /* 允许触摸滚动 */
+    overscroll-behavior: contain;
+    height: 100%;
+    /* 确保触摸事件可以正常工作 */
+    pointer-events: auto !important;
+    /* 防止被父元素阻止 */
+    -webkit-tap-highlight-color: transparent;
   }
 
   .news-header h1 {

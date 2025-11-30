@@ -13,26 +13,18 @@
   position: relative;
 }
 
-/* 移动端：输入框和按钮在同一行 */
+/* 移动端优化 */
 @media (max-width: 768px) {
   .input-wrapper {
     gap: 8px;
   }
   
-  /* 图片预览和 base64 检测的图片仍然在上方 */
-  .image-preview,
-  .image-preview.base64-detected {
-    order: -1;
+  .image-preview-wrapper {
     margin-bottom: 6px;
   }
   
-  /* 输入框和按钮容器改为行布局 */
-  .input-wrapper > textarea {
-    order: 1;
-  }
-  
-  .input-footer {
-    order: 2;
+  .image-preview {
+    max-width: 250px;
   }
 }
 
@@ -67,14 +59,20 @@
   cursor: not-allowed;
 }
 
+/* 图片预览容器 - 在输入框上方 */
+.image-preview-wrapper {
+  margin-bottom: 8px;
+  animation: slideDown 0.2s ease-out;
+}
+
 .image-preview {
   position: relative;
   width: 100%;
   max-width: 300px;
-  margin-bottom: 12px;
   border-radius: 8px;
   overflow: hidden;
   border: 2px solid #e0e0e0;
+  background: #fafafa;
 }
 
 .image-preview img {

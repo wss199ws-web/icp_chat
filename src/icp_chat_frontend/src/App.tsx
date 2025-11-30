@@ -53,6 +53,7 @@ const AppContent: React.FC = () => {
             position: isNewsList ? 'relative' : 'absolute',
             top: 0,
             left: 0,
+            overflow: 'hidden', // 父容器不滚动，让子容器滚动
           }}
         >
           {newsListComponent}
@@ -60,7 +61,12 @@ const AppContent: React.FC = () => {
 
         {/* 新闻详情页直接渲染（不缓存，每次都重新渲染） */}
         {isNewsDetail && (
-          <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+          <div style={{ 
+            width: '100%', 
+            height: '100%', 
+            position: 'relative',
+            overflow: 'hidden', // 父容器不滚动，让子容器滚动
+          }}>
             <Routes>
               <Route path="/news/:id" element={<NewsDetail />} />
             </Routes>

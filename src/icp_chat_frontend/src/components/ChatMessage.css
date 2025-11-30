@@ -10,6 +10,8 @@
   position: relative;
   user-select: text;
   overflow: visible; /* 允许按钮显示在外部 */
+  /* 允许触摸滚动，不阻止默认滚动行为 */
+  touch-action: pan-y pan-x;
 }
 
 .chat-message:hover {
@@ -261,6 +263,16 @@
 
 .message-image img:hover {
   transform: scale(1.02);
+}
+
+.message-image-clickable {
+  cursor: pointer !important;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.message-image-clickable:hover {
+  opacity: 0.9;
 }
 
 .image-loading,

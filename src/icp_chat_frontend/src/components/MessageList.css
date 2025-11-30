@@ -5,6 +5,9 @@
   padding: 20px 50px 20px 20px; /* 右侧留出空间给三个点按钮 */
   border-radius: 12px;
   margin-bottom: 8px;
+  /* 确保可以滚动 */
+  -webkit-overflow-scrolling: touch; /* iOS 平滑滚动 */
+  touch-action: pan-y; /* 允许垂直滚动，防止与手势冲突 */
 }
 
 .message-list.empty {
@@ -97,9 +100,13 @@
     /* 移动端高度优化：使用 flex: 1 自动填充剩余空间，配合父容器的 flex 布局 */
     flex: 1;
     min-height: 0; /* 允许 flex 子元素缩小 */
-    overflow-y: auto;
+    overflow-y: auto !important; /* 确保可以滚动 */
     overflow-x: visible; /* 允许按钮显示在外部 */
-    -webkit-overflow-scrolling: touch;
+    -webkit-overflow-scrolling: touch !important; /* iOS 平滑滚动 */
+    touch-action: pan-y pan-x !important; /* 允许触摸滚动，覆盖父元素设置 */
+    overscroll-behavior: contain; /* 防止滚动链 */
+    /* 确保触摸事件可以正常工作 */
+    pointer-events: auto !important;
   }
 
   .message-list.empty {
@@ -138,9 +145,11 @@
     /* 小屏幕同样使用 flex: 1 自动填充 */
     flex: 1;
     min-height: 0;
-    overflow-y: auto;
+    overflow-y: auto !important; /* 确保可以滚动 */
     overflow-x: visible; /* 允许按钮显示在外部 */
-    -webkit-overflow-scrolling: touch;
+    -webkit-overflow-scrolling: touch; /* iOS 平滑滚动 */
+    touch-action: pan-y; /* 允许垂直滚动 */
+    overscroll-behavior: contain; /* 防止滚动链 */
   }
 
   .message-list.empty {

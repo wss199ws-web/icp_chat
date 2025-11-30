@@ -4,6 +4,7 @@ import { chatService } from '../services/chatService';
 import { encryptionService } from '../services/encryptionService';
 import MessageTooltip from './MessageTooltip';
 import MessageActionMenu from './MessageActionMenu';
+import ImagePreview from './ImagePreview';
 
 export interface ChatMessageProps {
   id: number;
@@ -80,9 +81,12 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(({
   const [showMoreButton, setShowMoreButton] = useState(false);
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [actionMenuPosition, setActionMenuPosition] = useState({ x: 0, y: 0 });
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hideMenuTimerRef = useRef<NodeJS.Timeout | null>(null);
   const messageRef = useRef<HTMLDivElement | null>(null);
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const SCROLL_THRESHOLD = 10; // 移动超过10px认为是滚动
   
   // 合并 refs
   const setRefs = useCallback((node: HTMLDivElement | null) => {
@@ -312,9 +316,13 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(({
     const touchX = touch.clientX;
     const touchY = touch.clientY;
     
+    // 记录初始触摸位置
+    touchStartPosRef.current = { x: touchX, y: touchY };
+    
     longPressTimerRef.current = setTimeout(() => {
       // 长按触发，显示工具提示
-      if (messageRef.current) {
+      // 但只有在没有移动的情况下才触发
+      if (messageRef.current && touchStartPosRef.current) {
         const rect = messageRef.current.getBoundingClientRect();
         // 将 tooltip 显示在触摸位置
         setTooltipPosition({
@@ -332,13 +340,33 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(({
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
+    // 清除触摸位置记录
+    touchStartPosRef.current = null;
   };
 
-  const handleTouchMove = () => {
-    // 移动时取消长按
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    // 如果触摸位置已记录，检查移动距离
+    if (touchStartPosRef.current) {
+      const touch = e.touches[0];
+      const deltaX = Math.abs(touch.clientX - touchStartPosRef.current.x);
+      const deltaY = Math.abs(touch.clientY - touchStartPosRef.current.y);
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      
+      // 如果移动距离超过阈值，认为是滚动操作，取消长按
+      if (distance > SCROLL_THRESHOLD) {
+        if (longPressTimerRef.current) {
+          clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+        }
+        // 清除触摸位置，允许滚动继续
+        touchStartPosRef.current = null;
+      }
+    } else {
+      // 如果没有初始位置记录，直接取消长按（可能是滚动中）
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
     }
   };
 
@@ -484,7 +512,9 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(({
               ) : imageUrl ? (
                 <img 
                   src={imageUrl} 
-                  alt="消息图片" 
+                  alt="消息图片"
+                  className="message-image-clickable"
+                  onClick={() => setPreviewImageUrl(imageUrl)}
                   onError={() => {
                     console.error('图片渲染失败:', imageUrl);
                     setImageError('图片渲染失败');
@@ -506,6 +536,8 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(({
               <img 
                 src={base64Data} 
                 alt={`消息图片 ${index + 1}`}
+                className="message-image-clickable"
+                onClick={() => setPreviewImageUrl(base64Data)}
                 onError={(e) => {
                   console.error('Base64 图片渲染失败:', index);
                   e.currentTarget.style.display = 'none';
@@ -531,6 +563,12 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(({
           position={{ x: tooltipPosition.x, y: tooltipPosition.y }}
           onReply={handleReply}
           onClose={handleCloseTooltip}
+        />
+      )}
+      {previewImageUrl && (
+        <ImagePreview
+          imageUrl={previewImageUrl}
+          onClose={() => setPreviewImageUrl(null)}
         />
       )}
     </div>
