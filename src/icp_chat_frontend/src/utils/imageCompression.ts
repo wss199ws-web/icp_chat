@@ -1,6 +1,6 @@
 /**
  * 图片压缩工具
- * 当图片超过2MB时，自动压缩到1MB以内
+ * 当图片超过2MB，自动压缩到1MB以内
  */
 
 const MAX_SIZE_BEFORE_COMPRESS = 2 * 1024 * 1024; // 2MB
