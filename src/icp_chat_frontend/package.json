@@ -12,6 +12,7 @@
     "@dfinity/agent": "^2.0.0",
     "@dfinity/auth-client": "^2.0.0",
     "@dfinity/identity": "^2.0.0",
+    "@dfinity/ledger-icp": "^8.0.1",
     "cross-env": "^10.1.0",
     "qrcode.react": "^4.2.0",
     "react": "^18.2.0",
