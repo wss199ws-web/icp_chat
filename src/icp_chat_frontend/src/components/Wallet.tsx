@@ -57,7 +57,7 @@ const Wallet: React.FC = () => {
             
             // 延迟一下再加载余额，确保身份已完全初始化
             setTimeout(() => {
-              loadBalance(p);
+              loadBalance();
             }, 500);
           } else {
             setError('无法获取用户身份。请尝试退出并重新登录。');
@@ -85,12 +85,12 @@ const Wallet: React.FC = () => {
     checkAuthAndLoadBalance();
   }, []);
 
-  // 加载余额
-  const loadBalance = async (principal: Principal) => {
+  // 加载余额（通过后端 canister，自动使用当前登录用户）
+  const loadBalance = async () => {
     try {
       setLoading(true);
       setError(null);
-      const bal = await getAccountBalance(principal);
+      const bal = await getAccountBalance();
       setBalance(bal);
     } catch (err) {
       console.error('[Wallet] 加载余额失败:', err);
@@ -102,10 +102,8 @@ const Wallet: React.FC = () => {
 
   // 刷新余额
   const refreshBalance = async () => {
-    if (!principal) return;
     try {
-      const p = Principal.fromText(principal);
-      await loadBalance(p);
+      await loadBalance();
     } catch (err) {
       console.error('[Wallet] 刷新余额失败:', err);
     }

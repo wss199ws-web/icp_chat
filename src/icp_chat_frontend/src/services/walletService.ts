@@ -6,6 +6,7 @@ import { IDL } from '@dfinity/candid';
 type IDLType = typeof IDL;
 import { config } from '../config';
 import { authService } from './authService';
+import { createActor } from './icpAgent';
 
 // ICP Ledger Canister ID (主网)
 const LEDGER_CANISTER_ID_MAINNET = 'ryjl3-tyaaa-aaaaa-aaaba-cai';
@@ -14,13 +15,12 @@ const LEDGER_CANISTER_ID_MAINNET = 'ryjl3-tyaaa-aaaaa-aaaba-cai';
 const LEDGER_CANISTER_ID_LOCAL = 'ryjl3-tyaaa-aaaaa-aaaba-cai';
 
 // Ledger IDL 定义（简化版，只包含我们需要的方法）
-// 注意：根据错误信息，Ledger 期望 account_identifier 是 blob 类型
-// 在 Candid 中，blob 用 Vec<Nat8> 表示，但需要确保编码正确
+// 注意：虽然 Ledger 期望 blob 类型，但在 Candid IDL 中 blob 用 Vec<Nat8> 表示
+// 关键是要确保传递 Uint8Array，让 @dfinity/agent 正确处理编码
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ledgerIdlFactory = ({ IDL }: { IDL: IDLType }) => {
   // AccountIdentifier 是 32 字节，在 Candid 中表示为 Vec<Nat8>
-  // 但根据错误信息，Ledger 可能期望不同的格式
-  // 尝试使用 Vec<Nat8>，但确保传递的是正确的格式
+  // 虽然 Ledger 内部期望 blob，但 IDL 定义使用 Vec<Nat8>
   const AccountIdentifier = IDL.Vec(IDL.Nat8);
   const SubAccount = IDL.Vec(IDL.Nat8);
   const BlockHeight = IDL.Nat64;
@@ -28,9 +28,9 @@ const ledgerIdlFactory = ({ IDL }: { IDL: IDLType }) => {
   const Timestamp = IDL.Nat64;
   const Tokens = IDL.Record({ e8s: IDL.Nat64 });
   // 根据错误信息，Ledger 期望 record { account : blob }
-  // 但标准 IDL 使用 account_identifier
+  // 但标准 IDL 使用 account_identifier，尝试两种方式
   const AccountBalanceArgs = IDL.Record({
-    account_identifier: AccountIdentifier,
+    account: AccountIdentifier,
   });
   const TransferArgs = IDL.Record({
     to: AccountIdentifier,
@@ -64,14 +64,15 @@ const ledgerIdlFactory = ({ IDL }: { IDL: IDLType }) => {
 };
 
 // Ledger Actor 接口类型
-// 注意：AccountIdentifier 在 Candid 中表示为 Vec<Nat8>，即 number[]
+// 注意：虽然 IDL 定义为 Vec<Nat8>，但我们需要传递 number[]
+// 根据错误信息，Ledger 期望参数名为 account 而不是 account_identifier
 interface LedgerService {
-  account_balance: (args: { account_identifier: number[] }) => Promise<{ e8s: bigint }>;
+  account_balance: (args: { account: number[] }) => Promise<{ e8s: bigint }>;
   transfer: (args: {
-    to: number[];
+    to: Uint8Array | number[];
     fee: { e8s: bigint };
     memo: bigint;
-    from_subaccount?: [] | [number[]];
+    from_subaccount?: [] | [Uint8Array | number[]];
     created_at_time?: [] | [{ timestamp_nanos: bigint }];
     amount: { e8s: bigint };
   }) => Promise<{ Ok?: bigint; Err?: any }>;
@@ -169,21 +170,22 @@ export async function principalToAccountIdentifier(
   return accountIdentifier;
 }
 
-// 获取账户余额
-export async function getAccountBalance(principal: Principal): Promise<bigint> {
+// 获取账户余额（通过后端 canister）
+// 注意：不再需要 principal 参数，后端会自动使用 caller（当前登录用户）
+export async function getAccountBalance(): Promise<bigint> {
   try {
-    const ledger = await createLedgerActor();
-    const accountIdentifier = await principalToAccountIdentifier(principal);
-    
-    // 将 Uint8Array 转换为 number[] 数组格式（Vec<Nat8>）
-    // Candid 编码需要数组格式，而不是 Uint8Array
-    const accountIdentifierArray: number[] = Array.from(accountIdentifier);
-    
-    const result = await ledger.account_balance({
-      account_identifier: accountIdentifierArray,
-    });
+    // 检查是否已登录
+    const isAuthenticated = await authService.isAuthenticated();
+    if (!isAuthenticated) {
+      throw new Error('请先登录以查询余额。余额查询需要 Internet Identity 身份验证。');
+    }
 
-    return result.e8s || BigInt(0);
+    // 通过后端 canister 获取余额
+    const actor = await createActor();
+    const balance = await actor.getIcpBalance();
+    
+    // 后端返回的是 Nat（bigint），单位是 e8s
+    return balance || BigInt(0);
   } catch (error) {
     console.error('[WalletService] 获取余额失败:', error);
     
@@ -193,12 +195,14 @@ export async function getAccountBalance(principal: Principal): Promise<bigint> {
       
       // 身份验证相关错误
       if (errorMessage.includes('403') || errorMessage.includes('Forbidden') || 
-          errorMessage.includes('authenticate') || errorMessage.includes('certificate')) {
+          errorMessage.includes('authenticate') || errorMessage.includes('certificate') ||
+          errorMessage.includes('请先登录')) {
         throw new Error('身份验证失败。请确保已登录，如果问题持续，请尝试退出并重新登录。');
       }
       
       // 网络相关错误
-      if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
+      if (errorMessage.includes('network') || errorMessage.includes('fetch') ||
+          errorMessage.includes('canister_not_found')) {
         const network = config.network;
         if (network === 'local') {
           throw new Error('无法连接到本地 ICP 网络。请确保已运行: dfx start --background');

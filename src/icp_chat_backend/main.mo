@@ -69,6 +69,27 @@ actor ICPChat {
     mimeType : Text;
   };
 
+  // 主网 ICP Ledger canister（余额、转账等）
+  type LedgerService = actor {
+    icrc1_balance_of : shared { owner : Principal; subaccount : ?Blob } -> async Nat;
+  };
+
+  // 获取 Ledger canister 的 actor 引用
+  func ledger() : LedgerService {
+    // 这里直接写主网 Ledger 的 canister id
+    actor ("ryjl3-tyaaa-aaaaa-aaaba-cai");
+  };
+  // 查询当前 caller 的 ICP 余额（单位：e8s）
+  public shared ({ caller }) func getIcpBalance() : async Nat {
+    let account = {
+      owner = caller;
+      subaccount = null; // 默认子账户 0
+    };
+
+    // 这里用 ledger() 拿到远程 actor，再调用 icrc1_balance_of
+    await ledger().icrc1_balance_of(account)
+  };
+
   private func newUploadSession(totalSize : Nat, mimeType : Text) : UploadSession {
     {
       buffer = Buffer.Buffer<Nat8>(Nat.min(totalSize, 1024));
