@@ -12,8 +12,31 @@ import {
   getCurrentAccountIdentifier,
   accountIdentifierToHex,
   formatAccountIdentifier,
+  getIcpTxHistory,
+  ParsedIcpTxRecord,
 } from '../services/walletService';
 import { authService } from '../services/authService';
+
+type WalletRecordType = 'send' | 'receive';
+
+interface WalletRecord {
+  id: string;
+  type: WalletRecordType;
+  /**
+   * 对方地址（转账时是收款方，收款时是付款方）
+   */
+  address: string;
+  /**
+   * 以 ICP 为单位的金额，正数
+   */
+  amount: number;
+  /**
+   * ISO 字符串时间
+   */
+  time: string;
+}
+
+const WALLET_RECORDS_STORAGE_KEY = 'icp_wallet_records';
 
 const Wallet: React.FC = () => {
   const [balance, setBalance] = useState<bigint | null>(null);
@@ -23,7 +46,7 @@ const Wallet: React.FC = () => {
   const [principal, setPrincipal] = useState<string | null>(null);
   const [accountIdentifier, setAccountIdentifier] = useState<Uint8Array | null>(null);
   const [accountIdentifierHex, setAccountIdentifierHex] = useState<string | null>(null);
-  
+
   // 转账相关状态
   const [showTransfer, setShowTransfer] = useState<boolean>(false);
   const [transferTo, setTransferTo] = useState<string>('');
@@ -32,10 +55,113 @@ const Wallet: React.FC = () => {
   const [transferring, setTransferring] = useState<boolean>(false);
   const [transferError, setTransferError] = useState<string | null>(null);
   const [transferSuccess, setTransferSuccess] = useState<string | null>(null);
-  
+
   // 收款相关状态
   const [showReceive, setShowReceive] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+
+  // 本地账单 / 收款记录
+  const [records, setRecords] = useState<WalletRecord[]>([]);
+  const [recordFilter, setRecordFilter] = useState<'all' | WalletRecordType>('all');
+  // 链上历史记录
+  const [onchainRecords, setOnchainRecords] = useState<ParsedIcpTxRecord[]>([]);
+  const [onchainCursor, setOnchainCursor] = useState<bigint | null>(null);
+  const [onchainHasMore, setOnchainHasMore] = useState<boolean>(true);
+  const [onchainLoading, setOnchainLoading] = useState<boolean>(false);
+  const [onchainError, setOnchainError] = useState<string | null>(null);
+
+  // 从 localStorage 恢复记录
+  useEffect(() => {
+    try {
+      if (typeof window === 'undefined') return;
+      const raw = window.localStorage.getItem(WALLET_RECORDS_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as WalletRecord[];
+      if (Array.isArray(parsed)) {
+        setRecords(
+          parsed
+            .filter(
+              (r) =>
+                r &&
+                (r.type === 'send' || r.type === 'receive') &&
+                typeof r.address === 'string' &&
+                typeof r.amount === 'number' &&
+                typeof r.time === 'string'
+            )
+            // 按时间倒序
+            .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+            .slice(0, 100)
+        );
+      }
+    } catch (err) {
+      console.warn('[Wallet] 恢复本地账单记录失败:', err);
+    }
+  }, []);
+
+  const persistRecords = (next: WalletRecord[]) => {
+    try {
+      if (typeof window === 'undefined') return;
+      window.localStorage.setItem(WALLET_RECORDS_STORAGE_KEY, JSON.stringify(next));
+    } catch (err) {
+      console.warn('[Wallet] 保存本地账单记录失败:', err);
+    }
+  };
+
+  const addLocalRecord = (record: WalletRecord) => {
+    setRecords((prev) => {
+      const next = [record, ...prev].slice(0, 100);
+      persistRecords(next);
+      return next;
+    });
+  };
+
+  const formatRecordTime = (isoTime: string) => {
+    const d = new Date(isoTime);
+    if (Number.isNaN(d.getTime())) return isoTime;
+    return d.toLocaleString();
+  };
+
+  const mergeLocalAndOnchain = (
+    filter: 'all' | WalletRecordType,
+  ): WalletRecord[] => {
+    const onchainMapped: WalletRecord[] = onchainRecords.map((tx) => ({
+      id: `onchain-${tx.index.toString()}`,
+      type: tx.direction,
+      address: tx.direction === 'send' ? tx.to : tx.from,
+      amount: tx.amountIcp,
+      time: new Date(Number(tx.timestampNs / BigInt(1_000_000))).toISOString(),
+    }));
+
+    const merged = [...onchainMapped, ...records];
+
+    if (filter === 'all') return merged;
+    return merged.filter((r) => r.type === filter);
+  };
+
+  const loadOnchainHistory = async (reset = false) => {
+    if (onchainLoading) return;
+    try {
+      setOnchainLoading(true);
+      setOnchainError(null);
+
+      const cursor = reset ? null : onchainCursor;
+      const page = await getIcpTxHistory(cursor ?? null, 20);
+
+      setOnchainRecords((prev) =>
+        reset ? page.items : [...prev, ...page.items],
+      );
+      setOnchainCursor(page.nextCursor);
+      setOnchainHasMore(page.nextCursor !== null);
+    } catch (err) {
+      console.error('[Wallet] 获取链上交易历史失败:', err);
+      setOnchainError(
+        err instanceof Error ? err.message : '获取链上交易历史失败',
+      );
+      setOnchainHasMore(false);
+    } finally {
+      setOnchainLoading(false);
+    }
+  };
 
   // 检查登录状态并加载余额
   useEffect(() => {
@@ -163,6 +289,15 @@ const Wallet: React.FC = () => {
       }
       
       setTransferSuccess(`转账成功！区块高度: ${blockHeight.toString()}`);
+
+      // 记录本地账单（转账记录）
+      addLocalRecord({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: 'send',
+        address: toInput,
+        amount,
+        time: new Date().toISOString(),
+      });
       
       // 清空表单
       setTransferTo('');
@@ -213,6 +348,14 @@ const Wallet: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (isAuthenticated) {
+      // 首次加载时尝试拉取一页链上历史
+      loadOnchainHistory(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
+
   if (!isAuthenticated) {
     return (
       <div className="wallet-container">
@@ -233,6 +376,8 @@ const Wallet: React.FC = () => {
       </div>
     );
   }
+
+  const filteredRecords = mergeLocalAndOnchain(recordFilter);
 
   return (
     <div className="wallet-container">
@@ -395,6 +540,120 @@ const Wallet: React.FC = () => {
               </button>
             </div>
           )}
+        </div>
+
+        {/* 账单 / 收款记录（本地） */}
+        <div className="wallet-records-section">
+          <div className="wallet-section-header">
+            <h2>账单与收款记录</h2>
+            <div className="wallet-records-filters">
+              <button
+                type="button"
+                className={`wallet-records-filter-button ${
+                  recordFilter === 'all' ? 'wallet-records-filter-button-active' : ''
+                }`}
+                onClick={() => setRecordFilter('all')}
+              >
+                全部
+              </button>
+              <button
+                type="button"
+                className={`wallet-records-filter-button ${
+                  recordFilter === 'receive' ? 'wallet-records-filter-button-active' : ''
+                }`}
+                onClick={() => setRecordFilter('receive')}
+                disabled
+                title="当前版本暂不支持自动识别链上收款记录"
+              >
+                收款
+              </button>
+              <button
+                type="button"
+                className={`wallet-records-filter-button ${
+                  recordFilter === 'send' ? 'wallet-records-filter-button-active' : ''
+                }`}
+                onClick={() => setRecordFilter('send')}
+              >
+                转账
+              </button>
+            </div>
+          </div>
+
+          {onchainError && (
+            <div className="wallet-error-message wallet-records-error">
+              {onchainError}
+            </div>
+          )}
+
+          <div className="wallet-records-hint">
+            优先展示链上真实交易历史，并补充你在本浏览器中通过该钱包发起的本地记录，方便查看<strong>对方地址、时间和金额</strong>。
+          </div>
+
+          {filteredRecords.length === 0 ? (
+            <div className="wallet-records-empty">
+              暂无交易记录。完成一次转账或稍后重试加载链上记录。
+            </div>
+          ) : (
+            <div className="wallet-records-table-wrapper">
+              <table className="wallet-records-table">
+                <thead>
+                  <tr>
+                    <th>类型</th>
+                    <th>对方地址</th>
+                    <th>金额 (ICP)</th>
+                    <th>时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRecords.map((record) => (
+                    <tr key={record.id}>
+                      <td>
+                        <span
+                          className={`wallet-records-type wallet-records-type-${
+                            record.type === 'send' ? 'send' : 'receive'
+                          }`}
+                        >
+                          {record.type === 'send' ? '转账' : '收款'}
+                        </span>
+                      </td>
+                      <td className="wallet-records-address-cell">
+                        <span className="wallet-records-address-text">{record.address}</span>
+                      </td>
+                      <td className="wallet-records-amount-cell">
+                        <span
+                          className={`wallet-records-amount ${
+                            record.type === 'send'
+                              ? 'wallet-records-amount-send'
+                              : 'wallet-records-amount-receive'
+                          }`}
+                        >
+                          {record.type === 'send' ? '-' : '+'}
+                          {record.amount.toFixed(8).replace(/\.?0+$/, '')}
+                        </span>
+                      </td>
+                      <td className="wallet-records-time-cell">
+                        {formatRecordTime(record.time)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="wallet-records-footer">
+            <button
+              type="button"
+              className="wallet-records-load-more"
+              onClick={() => loadOnchainHistory(false)}
+              disabled={onchainLoading || !onchainHasMore}
+            >
+              {onchainLoading
+                ? '加载中...'
+                : onchainHasMore
+                ? '加载更多链上记录'
+                : '没有更多链上记录了'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

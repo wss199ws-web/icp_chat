@@ -79,6 +79,7 @@ actor ICPChat {
     // 这里直接写主网 Ledger 的 canister id
     actor ("ryjl3-tyaaa-aaaaa-aaaba-cai");
   };
+
   // 查询当前 caller 的 ICP 余额（单位：e8s）
   public shared ({ caller }) func getIcpBalance() : async Nat {
     let account = {
@@ -88,6 +89,51 @@ actor ICPChat {
 
     // 这里用 ledger() 拿到远程 actor，再调用 icrc1_balance_of
     await ledger().icrc1_balance_of(account)
+  };
+
+  // ========== ICP 链上交易历史（预留接口）==========
+
+  // 交易方向（相对于当前 caller）
+  public type IcpTxDirection = {
+    #send;
+    #receive;
+  };
+
+  // 精简后的交易记录结构，供前端展示使用
+  public type IcpTxRecord = {
+    index : Nat;          // 交易在账本中的索引（如果可用）
+    from : Text;          // 发送方地址（Principal 或 Account 文本）
+    to : Text;            // 接收方地址
+    amount : Nat;         // 金额（单位：e8s）
+    timestamp : Int;      // 时间戳（纳秒）
+    memo : ?Text;         // 备注（如果有的话，做简化后的文本表达）
+    direction : IcpTxDirection; // 相对当前 caller 是转出还是转入
+  };
+
+  // 分页返回结构，支持前端“加载更多”
+  public type IcpTxHistoryPage = {
+    txs : [IcpTxRecord];
+    nextCursor : ?Nat;
+  };
+
+  // 预留：获取当前 caller 的 ICP 交易历史（完整链上记录，分页）
+  //
+  // 说明：
+  // - cursor: 上一页返回的 nextCursor，首次调用传 null
+  // - limit: 期望返回的最大条数，后端可根据需要做上限裁剪
+  //
+  // 当前版本尚未接入 Ledger Index / ICRC-3，只返回空结果，主要用于
+  // 先打通前后端类型和调用链，后续只需在这里补链上查询实现。
+  public shared ({ caller }) func getIcpTxHistory(cursor : ?Nat, limit : Nat) : async IcpTxHistoryPage {
+    ignore caller;
+
+    let _ = cursor;
+    let _ = limit;
+
+    {
+      txs = [];
+      nextCursor = null;
+    };
   };
 
   private func newUploadSession(totalSize : Nat, mimeType : Text) : UploadSession {

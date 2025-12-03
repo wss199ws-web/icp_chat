@@ -6,6 +6,10 @@ import { AccountIdentifier, LedgerCanister, SubAccount } from '@dfinity/ledger-i
 import { config } from '../config';
 import { authService } from './authService';
 import { createActor } from './icpAgent';
+import type {
+  IcpTxHistoryPage,
+  IcpTxRecord,
+} from '../declarations/icp_chat_backend/icp_chat_backend.did.d';
 
 // ICP Ledger Canister ID (主网)
 const LEDGER_CANISTER_ID_MAINNET = 'ryjl3-tyaaa-aaaaa-aaaba-cai';
@@ -390,3 +394,117 @@ export async function getCurrentAccountIdentifier(): Promise<Uint8Array | null> 
   }
 }
 
+// ========== ICP 链上交易历史 ==========
+
+export interface ParsedIcpTxRecord {
+  index: bigint;
+  from: string;
+  to: string;
+  /**
+   * e8s 金额
+   */
+  amountE8s: bigint;
+  /**
+   * 转换为 ICP 的浮点值，仅用于展示
+   */
+  amountIcp: number;
+  timestampNs: bigint;
+  memo?: string;
+  direction: 'send' | 'receive';
+}
+
+export interface ParsedIcpTxHistoryPage {
+  items: ParsedIcpTxRecord[];
+  nextCursor: bigint | null;
+}
+
+function parseDirection(direction: IcpTxRecord['direction']): 'send' | 'receive' {
+  if ('send' in direction) return 'send';
+  return 'receive';
+}
+
+function parseHistoryPage(raw: IcpTxHistoryPage): ParsedIcpTxHistoryPage {
+  const items: ParsedIcpTxRecord[] = raw.txs.map((tx) => {
+    const dir = parseDirection(tx.direction);
+    const amountIcp = Number(tx.amount) / 100000000;
+    const memo = tx.memo.length > 0 ? tx.memo[0] : undefined;
+
+    return {
+      index: tx.index,
+      from: tx.from,
+      to: tx.to,
+      amountE8s: tx.amount,
+      amountIcp,
+      timestampNs: tx.timestamp,
+      memo,
+      direction: dir,
+    };
+  });
+
+  const nextCursor =
+    raw.nextCursor.length > 0 ? (raw.nextCursor[0] as bigint) : null;
+
+  return {
+    items,
+    nextCursor,
+  };
+}
+
+// 通过后端 canister 获取当前登录用户的 ICP 交易历史（链上）
+// 注意：对外语义是 cursor 为 bigint | null，这里用 any 规避 TS 对默认参数的联合类型推断问题
+export async function getIcpTxHistory(
+  rawCursor: any,
+  limit: number = 20,
+): Promise<ParsedIcpTxHistoryPage> {
+  // 检查是否已登录
+  const isAuthenticated = await authService.isAuthenticated();
+  if (!isAuthenticated) {
+    throw new Error('请先登录以查看交易历史。');
+  }
+
+  if (limit <= 0) {
+    limit = 20;
+  }
+  const safeLimit = BigInt(Math.min(limit, 100));
+
+  try {
+    const actor = await createActor();
+    const cursor: bigint | null = rawCursor ?? null;
+    const cursorOpt: [] | [bigint] =
+      cursor === null ? [] : [cursor as bigint];
+
+    const page = await actor.getIcpTxHistory(cursorOpt, safeLimit);
+    return parseHistoryPage(page);
+  } catch (error) {
+    console.error('[WalletService] 获取交易历史失败:', error);
+
+    if (error instanceof Error) {
+      const msg = error.message;
+      if (
+        msg.includes('403') ||
+        msg.includes('Forbidden') ||
+        msg.includes('authenticate') ||
+        msg.includes('certificate') ||
+        msg.includes('请先登录')
+      ) {
+        throw new Error('身份验证失败。请重新登录后再试。');
+      }
+
+      if (
+        msg.includes('network') ||
+        msg.includes('fetch') ||
+        msg.includes('canister_not_found')
+      ) {
+        const network = config.network;
+        if (network === 'local') {
+          throw new Error('无法连接到本地 ICP 网络。请确认 dfx 是否已启动。');
+        }
+        throw new Error('无法连接到 ICP 网络，请检查网络或稍后重试。');
+      }
+
+      throw error;
+    }
+
+    throw new Error('获取交易历史失败，请稍后重试。');
+  }
+}
