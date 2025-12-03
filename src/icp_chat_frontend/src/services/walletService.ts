@@ -469,11 +469,18 @@ export async function getIcpTxHistory(
 
   try {
     const actor = await createActor();
+
+    // 兼容老版本后端：如果还没有部署带 getIcpTxHistory 的 canister，给出友好提示
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const anyActor = actor as any;
+    if (typeof anyActor.getIcpTxHistory !== 'function') {
+      throw new Error('当前后端版本未提供交易历史接口，请先升级/重新部署后端 canister。');
+    }
     const cursor: bigint | null = rawCursor ?? null;
     const cursorOpt: [] | [bigint] =
       cursor === null ? [] : [cursor as bigint];
 
-    const page = await actor.getIcpTxHistory(cursorOpt, safeLimit);
+    const page = await anyActor.getIcpTxHistory(cursorOpt, safeLimit);
     return parseHistoryPage(page);
   } catch (error) {
     console.error('[WalletService] 获取交易历史失败:', error);
