@@ -72,6 +72,7 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(({
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [base64Images, setBase64Images] = useState<string[]>([]);
   const [displayText, setDisplayText] = useState<string>('');
   const [decryptError, setDecryptError] = useState<boolean>(false);
@@ -112,22 +113,60 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(({
     console.log(`ChatMessage: 开始加载图片 ID ${imageId}`);
     setImageLoading(true);
     setImageError(null);
+    setImageDimensions(null);
     try {
       const blob = await chatService.getImage(imageId);
       console.log(`ChatMessage: 获取到图片 blob, 大小: ${blob?.size || 0} bytes`);
       if (blob && blob.size > 0) {
         const url = URL.createObjectURL(blob);
         console.log(`ChatMessage: 创建对象 URL 成功: ${url.substring(0, 50)}...`);
-        setImageUrl(url);
+        
+        // 优先使用 createImageBitmap 获取尺寸（更高效，可以在解码前获取尺寸）
+        // 如果浏览器不支持，回退到 Image 对象
+        try {
+          if (typeof createImageBitmap !== 'undefined') {
+            // 使用 createImageBitmap，它可以在图片解码前就获取尺寸信息
+            const imageBitmap = await createImageBitmap(blob);
+            const width = imageBitmap.width;
+            const height = imageBitmap.height;
+            console.log(`ChatMessage: 通过 createImageBitmap 获取图片尺寸 ${width}x${height}`);
+            imageBitmap.close(); // 释放资源
+            setImageDimensions({ width, height });
+            setImageUrl(url);
+            setImageLoading(false);
+          } else {
+            // 回退方案：使用 Image 对象预加载获取尺寸
+            const img = new Image();
+            img.onload = () => {
+              const width = img.naturalWidth;
+              const height = img.naturalHeight;
+              console.log(`ChatMessage: 通过 Image 对象获取图片尺寸 ${width}x${height}`);
+              setImageDimensions({ width, height });
+              setImageUrl(url);
+              setImageLoading(false);
+            };
+            img.onerror = () => {
+              console.error('ChatMessage: 图片预加载失败');
+              setImageError('图片加载失败');
+              setImageLoading(false);
+            };
+            img.src = url;
+          }
+        } catch (decodeError) {
+          console.error('ChatMessage: 获取图片尺寸失败:', decodeError);
+          // 如果获取尺寸失败，仍然尝试显示图片（使用默认尺寸）
+          setImageUrl(url);
+          setImageLoading(false);
+        }
       } else {
         setImageError('图片数据为空');
         console.warn(`图片 ID ${imageId} 的数据为空`);
+        setImageLoading(false);
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : '未知错误';
       setImageError(`加载失败: ${errorMsg}`);
       console.error(`加载图片 ID ${imageId} 失败:`, error);
-    } finally {
       setImageLoading(false);
     }
   }, [imageId]);
@@ -170,6 +209,7 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(({
       setImageUrl(null);
       setImageError(null);
       setImageLoading(false);
+      setImageDimensions(null);
     }
   }, [imageId, loadImage]);
 
@@ -502,18 +542,36 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(({
           
           {/* 显示通过 imageId 上传的图片 */}
           {imageId !== undefined && imageId !== null && (
-            <div className="message-image">
-              {imageLoading ? (
-                <div className="image-loading">加载中...</div>
-              ) : imageError ? (
-                <div className="image-error" title={imageError}>
-                  ⚠️ 图片加载失败 (ID: {imageId})
+            <div 
+              className="message-image"
+              style={imageDimensions && imageLoading ? {
+                aspectRatio: `${imageDimensions.width} / ${imageDimensions.height}`,
+                maxWidth: '400px',
+              } : undefined}
+            >
+              {/* 占位符：在图片加载前显示，使用实际图片尺寸保持布局稳定 */}
+              {imageLoading && !imageUrl && (
+                <div 
+                  className="image-placeholder"
+                  style={imageDimensions ? {
+                    aspectRatio: `${imageDimensions.width} / ${imageDimensions.height}`,
+                  } : undefined}
+                >
+                  <div className="image-placeholder-content">
+                    <div className="image-placeholder-spinner"></div>
+                    <span>加载中...</span>
+                  </div>
                 </div>
-              ) : imageUrl ? (
+              )}
+              {/* 实际图片：加载完成后显示 */}
+              {imageUrl && (
                 <img 
                   src={imageUrl} 
                   alt="消息图片"
                   className="message-image-clickable"
+                  style={imageDimensions ? {
+                    aspectRatio: `${imageDimensions.width} / ${imageDimensions.height}`,
+                  } : undefined}
                   onClick={() => setPreviewImageUrl(imageUrl)}
                   onError={() => {
                     console.error('图片渲染失败:', imageUrl);
@@ -524,8 +582,12 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(({
                     console.log(`ChatMessage: 图片 ID ${imageId} 渲染成功`);
                   }}
                 />
-              ) : (
-                <div className="image-error">图片不可用 (ID: {imageId})</div>
+              )}
+              {/* 错误状态 */}
+              {imageError && !imageUrl && (
+                <div className="image-error" title={imageError}>
+                  ⚠️ 图片加载失败 (ID: {imageId})
+                </div>
               )}
             </div>
           )}
