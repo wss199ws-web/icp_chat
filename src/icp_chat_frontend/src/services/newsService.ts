@@ -143,8 +143,6 @@ class NewsService {
         const rssUrl = this.ECONOMIC_RSS_FEEDS[this.currentRssIndex % this.ECONOMIC_RSS_FEEDS.length];
         this.currentRssIndex++;
         
-        console.log(`[NewsService] 尝试RSS源 ${i + 1}/${maxAttempts}: ${rssUrl}`);
-        
         // 使用 RSS2JSON API（免费，无需密钥）
         const proxyUrl = 'https://api.rss2json.com/v1/api.json';
         const response = await fetch(`${proxyUrl}?rss_url=${encodeURIComponent(rssUrl)}`, {
@@ -228,7 +226,6 @@ class NewsService {
     });
 
     if (uniqueNews.length > 0) {
-      console.log(`[NewsService] 成功获取 ${uniqueNews.length} 条经济新闻`);
       return uniqueNews.slice(0, 30); // 返回最多30条
     }
 
@@ -271,8 +268,6 @@ class NewsService {
     if (!url || url === '#') return null;
     
     try {
-      console.log(`[NewsService] 尝试获取完整内容: ${url}`);
-      
       // 使用CORS代理获取内容（尝试多个代理）
       const proxies = [
         `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
@@ -331,7 +326,6 @@ class NewsService {
           for (const selector of contentSelectors) {
             contentElement = tempDiv.querySelector(selector);
             if (contentElement) {
-              console.log(`[NewsService] 找到内容容器: ${selector}`);
               break;
             }
           }
@@ -350,7 +344,6 @@ class NewsService {
           
           // 如果内容足够长（超过200字符），返回它
           if (text.length > 200) {
-            console.log(`[NewsService] 成功获取完整内容: ${text.length} 字符`);
             return text;
           } else {
             console.warn(`[NewsService] 获取的内容太短: ${text.length} 字符`);
@@ -461,8 +454,6 @@ class NewsService {
         const rssUrl = this.WEB3_RSS_FEEDS[this.currentWeb3RssIndex % this.WEB3_RSS_FEEDS.length];
         this.currentWeb3RssIndex++;
         
-        console.log(`[NewsService] 尝试Web3 RSS源 ${i + 1}/${maxAttempts}: ${rssUrl}`);
-        
         const proxyUrl = 'https://api.rss2json.com/v1/api.json';
         const response = await fetch(`${proxyUrl}?rss_url=${encodeURIComponent(rssUrl)}`, {
           signal: AbortSignal.timeout(10000),
@@ -548,7 +539,6 @@ class NewsService {
     });
 
     if (uniqueNews.length > 0) {
-      console.log(`[NewsService] 成功获取 ${uniqueNews.length} 条Web3文章`);
       return uniqueNews.slice(0, 30);
     }
 
@@ -610,7 +600,6 @@ class NewsService {
       if (!forceRefresh) {
         const cachedData = this.newsListCache.get(category);
         if (this.isCacheValid(cachedData)) {
-          console.log(`[NewsService] 从缓存获取新闻列表: ${category}`);
           // 更新单个新闻的缓存
           cachedData!.data.forEach(item => {
             this.newsCache.set(item.id, item);
@@ -618,8 +607,6 @@ class NewsService {
           return cachedData!.data;
         }
       }
-
-      console.log(`[NewsService] 获取新闻列表: ${category} (强制刷新: ${forceRefresh})`);
       let news: NewsItem[] = [];
       
       if (category === 'web3') {
@@ -665,7 +652,6 @@ class NewsService {
       // 如果出错，尝试返回缓存数据
       const cachedData = this.newsListCache.get(category);
       if (cachedData) {
-        console.log('[NewsService] 使用缓存数据作为降级方案');
         return cachedData.data;
       }
       return this.getMockNews();
@@ -679,15 +665,11 @@ class NewsService {
    */
   async getNewsById(id: string): Promise<NewsItem | null> {
     try {
-      console.log(`[NewsService] 查找新闻 ID: ${id}`);
-      
       // 首先尝试从缓存中查找
       let news = this.newsCache.get(id);
       if (news) {
-        console.log(`[NewsService] 从缓存中找到新闻: ${news.title}`);
         // 如果缓存中的内容太短，尝试获取完整内容
         if (news.content.length < 500 && news.url && news.url !== '#') {
-          console.log(`[NewsService] 内容较短，尝试获取完整内容...`);
           const fullContent = await this.fetchFullContent(news.url);
           if (fullContent && fullContent.length > news.content.length) {
             news = { ...news, content: fullContent };
@@ -698,7 +680,6 @@ class NewsService {
       }
       
       // 如果缓存中没有，尝试从所有分类获取
-      console.log(`[NewsService] 缓存中未找到，重新获取数据...`);
       const [economicNews, web3News] = await Promise.all([
         this.getNewsList(100, 'economic'),
         this.getNewsList(100, 'web3'),
@@ -723,7 +704,6 @@ class NewsService {
       
       // 如果还是找不到，尝试通过URL匹配（URL是唯一且稳定的）
       if (!news) {
-        console.log(`[NewsService] 尝试通过URL匹配...`);
         // 从ID中提取可能的URL信息（如果ID包含URL的hash）
         // 或者尝试匹配所有新闻的URL hash
         for (const item of allNews) {
@@ -740,14 +720,10 @@ class NewsService {
       
       // 如果找到了，更新缓存，并尝试获取完整内容
       if (news) {
-        console.log(`[NewsService] 找到新闻: ${news.title}`);
-        
         // 如果内容太短，尝试从原始URL获取完整内容
         if (news.content.length < 500 && news.url && news.url !== '#') {
-          console.log(`[NewsService] 内容较短(${news.content.length}字符)，尝试获取完整内容...`);
           const fullContent = await this.fetchFullContent(news.url);
           if (fullContent && fullContent.length > news.content.length) {
-            console.log(`[NewsService] 成功获取完整内容(${fullContent.length}字符)`);
             news = { ...news, content: fullContent };
           }
         }
@@ -761,9 +737,6 @@ class NewsService {
       }
       
       console.warn(`[NewsService] 无法找到新闻 ID: ${id}`);
-      console.log(`[NewsService] 当前缓存中的ID列表:`, Array.from(this.newsCache.keys()));
-      console.log(`[NewsService] 当前获取到的新闻ID列表:`, allNews.map(n => n.id));
-      
       return null;
     } catch (error) {
       console.error('[NewsService] 获取新闻详情失败:', error);

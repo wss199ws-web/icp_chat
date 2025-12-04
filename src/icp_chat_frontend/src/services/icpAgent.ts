@@ -22,8 +22,6 @@ async function createActorWithFallback(
 
   for (const host of hostsToTry) {
     try {
-      console.log(`[ICP Agent] 尝试使用端点: ${host}`);
-      
       const agentOptions: any = { host };
       if (identity) {
         agentOptions.identity = identity;
@@ -41,10 +39,6 @@ async function createActorWithFallback(
         canisterId,
       }) as _SERVICE;
 
-      // 尝试一个简单的查询来验证连接
-      // 注意：这里不实际调用，只是创建 Actor，实际调用时如果失败会自动重试
-      console.log(`[ICP Agent] 成功使用端点: ${host}`);
-      
       // 如果成功，保存这个端点作为首选
       if (network === 'ic' && host !== primaryHost) {
         config.setCustomHost(host);
@@ -106,7 +100,6 @@ export async function createActor(): Promise<_SERVICE> {
       );
     }
 
-    console.log('[ICP Agent] 创建 Actor:', { canisterId, network });
     return await createActorWithFallback(canisterId, network, identity);
   } catch (error) {
     // 检查是否是 canister_not_found 错误
@@ -132,11 +125,6 @@ export async function createActor(): Promise<_SERVICE> {
 export async function createAnonymousActor(): Promise<_SERVICE> {
   const canisterId = config.canisterId;
   const network = config.network;
-
-  console.log('[ICP Agent] 创建匿名 Actor:', {
-    canisterId,
-    network,
-  });
 
   if (!canisterId) {
     throw new Error(

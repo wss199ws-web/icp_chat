@@ -7,15 +7,15 @@ import './index.css';
 if (import.meta.env.PROD && typeof window !== 'undefined') {
   const noop = () => {};
   // eslint-disable-next-line no-console
-  console.log = noop as any;
+  (console as any).log = noop as any;
   // eslint-disable-next-line no-console
-  console.warn = noop as any;
+  (console as any).warn = noop as any;
   // eslint-disable-next-line no-console
-  console.error = noop as any;
+  (console as any).error = noop as any;
   // eslint-disable-next-line no-console
-  console.info = noop as any;
+  (console as any).info = noop as any;
   // eslint-disable-next-line no-console
-  console.debug = noop as any;
+  (console as any).debug = noop as any;
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

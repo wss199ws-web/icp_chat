@@ -106,30 +106,25 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(({
 
   const loadImage = useCallback(async () => {
     if (imageId === undefined || imageId === null) {
-      console.log('ChatMessage: imageId 为空，跳过加载');
       return;
     }
     
-    console.log(`ChatMessage: 开始加载图片 ID ${imageId}`);
     setImageLoading(true);
     setImageError(null);
     setImageDimensions(null);
     try {
       const blob = await chatService.getImage(imageId);
-      console.log(`ChatMessage: 获取到图片 blob, 大小: ${blob?.size || 0} bytes`);
       if (blob && blob.size > 0) {
         const url = URL.createObjectURL(blob);
-        console.log(`ChatMessage: 创建对象 URL 成功: ${url.substring(0, 50)}...`);
         
         // 优先使用 createImageBitmap 获取尺寸（更高效，可以在解码前获取尺寸）
         // 如果浏览器不支持，回退到 Image 对象
         try {
-          if (typeof createImageBitmap !== 'undefined') {
-            // 使用 createImageBitmap，它可以在图片解码前就获取尺寸信息
-            const imageBitmap = await createImageBitmap(blob);
-            const width = imageBitmap.width;
-            const height = imageBitmap.height;
-            console.log(`ChatMessage: 通过 createImageBitmap 获取图片尺寸 ${width}x${height}`);
+            if (typeof createImageBitmap !== 'undefined') {
+              // 使用 createImageBitmap，它可以在图片解码前就获取尺寸信息
+              const imageBitmap = await createImageBitmap(blob);
+              const width = imageBitmap.width;
+              const height = imageBitmap.height;
             imageBitmap.close(); // 释放资源
             setImageDimensions({ width, height });
             setImageUrl(url);
@@ -140,7 +135,6 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(({
             img.onload = () => {
               const width = img.naturalWidth;
               const height = img.naturalHeight;
-              console.log(`ChatMessage: 通过 Image 对象获取图片尺寸 ${width}x${height}`);
               setImageDimensions({ width, height });
               setImageUrl(url);
               setImageLoading(false);
@@ -201,7 +195,6 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(({
   }, [text]);
 
   useEffect(() => {
-    console.log(`ChatMessage: imageId 变化, 当前值: ${imageId}`);
     if (imageId !== undefined && imageId !== null) {
       loadImage();
     } else {
@@ -577,9 +570,6 @@ const ChatMessage = React.forwardRef<HTMLDivElement, ChatMessageProps>(({
                     console.error('图片渲染失败:', imageUrl);
                     setImageError('图片渲染失败');
                     setImageUrl(null);
-                  }}
-                  onLoad={() => {
-                    console.log(`ChatMessage: 图片 ID ${imageId} 渲染成功`);
                   }}
                 />
               )}

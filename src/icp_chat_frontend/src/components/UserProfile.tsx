@@ -66,14 +66,12 @@ const UserProfile: React.FC = () => {
     try {
       // 如果图片超过2MB，先压缩
       if (file.size > 2 * 1024 * 1024) {
-        console.log('[UserProfile] 头像图片超过2MB，开始压缩...');
         const compressedBlob = await compressImageToDataURL(file);
         setProfile((prev) => ({
           ...prev,
           avatar: compressedBlob,
         }));
         setError(null);
-        console.log(`[UserProfile] 压缩完成，原始: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
       } else {
         // 小于2MB，直接读取
         const reader = new FileReader();

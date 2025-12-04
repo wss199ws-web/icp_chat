@@ -23,7 +23,6 @@ const NewsList: React.FC = () => {
         // 检查是否有该分类的缓存
         const cachedNews = categoryCacheRef.current.get(category);
         if (cachedNews && cachedNews.length > 0 && !isFirstLoadRef.current) {
-          console.log(`[NewsList] 使用缓存数据: ${category}`);
           setNews(cachedNews);
           setLoading(false);
           return;

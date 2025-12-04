@@ -34,7 +34,6 @@ function detectNetwork(): string {
   // 优先级 1: 通过 hostname 检测是否在主网（最可靠的方式）
   // ICP 主网的域名通常是 *.ic0.app 或 *.icp0.io
   if (hostname.includes('.ic0.app') || hostname.includes('.icp0.io')) {
-    console.log('[Config] 通过 hostname 检测到主网:', hostname);
     return 'ic';
   }
   
@@ -43,7 +42,6 @@ function detectNetwork(): string {
   if (protocol === 'https:' && hostname !== 'localhost' && hostname !== '127.0.0.1') {
     // 但需要排除一些特殊情况，比如通过代理访问
     // 如果 hostname 不是本地地址，且使用 https，可能是主网
-    console.log('[Config] 通过协议检测到可能是主网:', { protocol, hostname });
     // 这里不直接返回 'ic'，继续检查其他条件
   }
   
@@ -53,13 +51,11 @@ function detectNetwork(): string {
   
   // 如果 URL 中有 canisterId 参数，且不是通过 localhost:4943 访问，很可能是主网
   if (hasCanisterId && port !== '4943' && hostname !== 'localhost' && hostname !== '127.0.0.1') {
-    console.log('[Config] 通过 URL 参数检测到可能是主网（有 canisterId 且不是本地端口）');
     // 这里也不直接返回，继续检查
   }
   
   // 优先级 4: localhost 或 127.0.0.1 且端口是 4943，明确是本地网络
   if ((hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0') && port === '4943') {
-    console.log('[Config] 检测到本地网络:', { hostname, port });
     return 'local';
   }
   
@@ -71,14 +67,12 @@ function detectNetwork(): string {
       const env = import.meta.env as Record<string, string>;
       const network = env.VITE_DFX_NETWORK;
       if (network === 'ic') {
-        console.log('[Config] 通过构建时环境变量检测到主网（通过 localhost 代理访问主网）');
         return 'ic';
       }
     }
     
     // 检查 window.__ICP_ENV__（HTML 中注入的）
     if (typeof window !== 'undefined' && window.__ICP_ENV__?.DFX_NETWORK === 'ic') {
-      console.log('[Config] 通过 window.__ICP_ENV__ 检测到主网');
       return 'ic';
     }
     
@@ -87,9 +81,8 @@ function detectNetwork(): string {
     if (canisterId && canisterId.length > 0) {
       // 主网 canister ID 通常以特定前缀开头，但更可靠的方式是检查环境变量
       // 这里我们主要依赖环境变量，但如果环境变量不可用，至少确保有 canister ID
-      console.log('[Config] localhost 访问，但检测到 canister ID，使用本地网络（DFX 代理）');
     } else {
-      console.log('[Config] localhost 访问，未检测到 canister ID，使用本地网络');
+      // 未检测到 canister ID，使用本地网络
     }
     
     // 默认 localhost 是本地网络
@@ -101,25 +94,21 @@ function detectNetwork(): string {
     const env = import.meta.env as Record<string, string>;
     const network = env.VITE_DFX_NETWORK;
     if (network) {
-      console.log('[Config] 从 Vite 环境变量获取网络类型:', network);
       return network;
     }
   }
   
   if (typeof window !== 'undefined' && window.__ICP_ENV__?.DFX_NETWORK) {
     const network = window.__ICP_ENV__.DFX_NETWORK;
-    console.log('[Config] 从 window.__ICP_ENV__ 获取网络类型:', network);
     return network;
   }
   
   if (typeof window !== 'undefined' && window.process?.env?.DFX_NETWORK) {
     const network = window.process.env.DFX_NETWORK;
-    console.log('[Config] 从 window.process.env 获取网络类型:', network);
     return network;
   }
   
   // 默认本地网络
-  console.log('[Config] 未检测到明确的网络类型，默认使用本地网络');
   return 'local';
 }
 
@@ -151,7 +140,6 @@ export const config = {
     // 1. 从 URL 参数获取（DFX 部署时）
     const urlCanisterId = getCanisterIdFromUrl();
     if (urlCanisterId) {
-      console.log('[Config] 从 URL 参数获取 canister ID:', urlCanisterId);
       return urlCanisterId;
     }
     
@@ -160,7 +148,6 @@ export const config = {
       const env = import.meta.env as Record<string, string>;
       const id = env.VITE_CANISTER_ID_ICP_CHAT_BACKEND;
       if (id) {
-        console.log('[Config] 从 Vite 环境变量获取 canister ID:', id);
         return id;
       }
     }
@@ -169,7 +156,6 @@ export const config = {
     if (typeof window !== 'undefined' && window.__ICP_ENV__?.CANISTER_ID_ICP_CHAT_BACKEND) {
       const id = window.__ICP_ENV__.CANISTER_ID_ICP_CHAT_BACKEND;
       if (id) {
-        console.log('[Config] 从 window.__ICP_ENV__ 获取 canister ID:', id);
         return id;
       }
     }
@@ -178,7 +164,6 @@ export const config = {
     if (typeof window !== 'undefined' && window.__CANISTER_IDS__?.icp_chat_backend) {
       const id = window.__CANISTER_IDS__.icp_chat_backend;
       if (id) {
-        console.log('[Config] 从 window.__CANISTER_IDS__ 获取 canister ID:', id);
         return id;
       }
     }
@@ -187,7 +172,6 @@ export const config = {
     if (typeof window !== 'undefined' && (window as any).CANISTER_ID_ICP_CHAT_BACKEND) {
       const id = (window as any).CANISTER_ID_ICP_CHAT_BACKEND;
       if (id) {
-        console.log('[Config] 从全局变量获取 canister ID:', id);
         return id;
       }
     }
@@ -196,7 +180,6 @@ export const config = {
     if (typeof process !== 'undefined' && process.env?.CANISTER_ID_ICP_CHAT_BACKEND) {
       const id = process.env.CANISTER_ID_ICP_CHAT_BACKEND;
       if (id) {
-        console.log('[Config] 从 process.env 获取 canister ID:', id);
         return id;
       }
     }
@@ -214,7 +197,6 @@ export const config = {
   },
   get network(): string {
     const network = detectNetwork();
-    console.log('[Config] 检测到的网络类型:', network, 'hostname:', typeof window !== 'undefined' ? window.location.hostname : 'N/A');
     return network;
   },
   get host(): string {
@@ -232,10 +214,9 @@ export const config = {
         const customHost = typeof window !== 'undefined' ? localStorage.getItem('ICP_CUSTOM_API_HOST') : null;
         if (customHost) {
           host = customHost;
-          console.log('[Config] 使用用户自定义的 API 端点:', host);
         } else {
           // 默认使用 icp-api.io，如果无法访问可以尝试其他端点
-        host = 'https://icp-api.io';
+          host = 'https://icp-api.io';
         }
       } else {
         // 通过 localhost 代理访问主网，使用 localhost:4943
@@ -245,7 +226,6 @@ export const config = {
       host = 'http://localhost:4943';
     }
     
-    console.log('[Config] 使用的 host:', host, 'network:', network, 'hostname:', hostname, '当前 URL:', typeof window !== 'undefined' ? window.location.href : 'N/A');
     return host;
   },
   
@@ -262,7 +242,6 @@ export const config = {
   setCustomHost(host: string): void {
     if (typeof window !== 'undefined') {
       localStorage.setItem('ICP_CUSTOM_API_HOST', host);
-      console.log('[Config] 已设置自定义 API 端点:', host);
     }
   },
   
@@ -270,7 +249,6 @@ export const config = {
   clearCustomHost(): void {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('ICP_CUSTOM_API_HOST');
-      console.log('[Config] 已清除自定义 API 端点');
     }
   },
 };

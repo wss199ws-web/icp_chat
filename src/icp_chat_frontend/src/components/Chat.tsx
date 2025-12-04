@@ -22,6 +22,7 @@ interface CachedChatState {
   timestamp: number;
 }
 
+// 优化：使用性能更好的缓存读取方式
 const loadCachedState = (): CachedChatState | null => {
   if (typeof window === 'undefined') {
     return null;
@@ -29,13 +30,26 @@ const loadCachedState = (): CachedChatState | null => {
 
   try {
     const cached = window.localStorage.getItem(LOCAL_STORAGE_KEY);
+    
     if (!cached) {
       return null;
     }
+    
+    // 快速解析 JSON（如果数据量大，可以考虑使用更快的解析方式）
     const parsed = JSON.parse(cached) as CachedChatState;
+    
     if (!Array.isArray(parsed.messages)) {
       return null;
     }
+    
+    // 限制缓存消息数量，避免数据过大影响性能
+    // 但保留更多消息以支持历史消息加载（增加到500条）
+    const MAX_CACHED_MESSAGES = 500;
+    if (parsed.messages.length > MAX_CACHED_MESSAGES) {
+      // 只保留最新的消息（保留最新的，因为用户更可能查看最新消息）
+      parsed.messages = parsed.messages.slice(-MAX_CACHED_MESSAGES);
+    }
+    
     return parsed;
   } catch (e) {
     console.warn('读取本地聊天缓存失败:', e);
@@ -56,11 +70,26 @@ const saveCachedState = (state: CachedChatState) => {
 
 const Chat: React.FC = () => {
   // 首次渲染时同步读取一次本地缓存，用于初始化各个 state，保证页面一进来就有数据
-  const initialCachedState: CachedChatState | null =
-    typeof window !== 'undefined' ? loadCachedState() : null;
+  // 使用立即执行的函数确保缓存读取是同步的、立即的
+  const initialCachedState: CachedChatState | null = (() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    
+    const startTime = performance.now();
+    const cached = loadCachedState();
+    const endTime = performance.now();
+    void startTime;
+    void endTime;
+    
+    return cached;
+  })();
 
-  const [messages, setMessages] = useState<Message[]>(() => initialCachedState?.messages ?? []);
-  const [loading, setLoading] = useState<boolean>(() => !initialCachedState);
+  // 立即初始化消息状态，确保缓存消息立即显示
+  const [messages, setMessages] = useState<Message[]>(() => {
+    const cachedMessages = initialCachedState?.messages ?? [];
+    return cachedMessages;
+  });
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [messageCount, setMessageCount] = useState(
@@ -88,18 +117,35 @@ const Chat: React.FC = () => {
   const broadcastChannelRef = useRef<BroadcastChannel | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // 将当前聊天状态保存到本地缓存
+  // 验证消息是否正确加载（用于调试）
+  useEffect(() => {
+    if (messages.length === 0 && typeof window !== 'undefined') {
+      // 如果消息为空，尝试重新读取缓存
+      const cached = loadCachedState();
+      if (cached && cached.messages && cached.messages.length > 0) {
+        setMessages(cached.messages);
+      }
+    }
+  }, []); // 只在组件挂载时执行一次
+
+  // 将当前聊天状态保存到本地缓存（使用防抖，避免频繁写入）
   useEffect(() => {
     if (!messages.length) {
       return;
     }
-    saveCachedState({
-      messages,
-      messageCount,
-      currentPage,
-      hasMoreMessages,
-      timestamp: Date.now(),
-    });
+    
+    // 使用防抖，避免频繁写入 localStorage（影响性能）
+    const timeoutId = setTimeout(() => {
+      saveCachedState({
+        messages,
+        messageCount,
+        currentPage,
+        hasMoreMessages,
+        timestamp: Date.now(),
+      });
+    }, 500); // 500ms 防抖
+    
+    return () => clearTimeout(timeoutId);
   }, [messages, messageCount, currentPage, hasMoreMessages]);
 
   // 检测消息中是否@了当前用户
@@ -158,15 +204,49 @@ const Chat: React.FC = () => {
     });
   }, [currentUser]);
 
-  // 加载最新一页消息
-  const loadLatestMessages = useCallback(async () => {
+  // 合并消息：按时间戳和消息ID去重，保持时间顺序
+  const mergeMessages = useCallback((existingMessages: Message[], newMessages: Message[]): Message[] => {
+    // 创建现有消息的ID集合，用于快速查找
+    const existingIds = new Set(existingMessages.map(msg => msg.id));
+    
+    // 过滤出真正的新消息（ID不存在于现有消息中）
+    const trulyNewMessages = newMessages.filter(msg => !existingIds.has(msg.id));
+    
+    if (trulyNewMessages.length === 0) {
+      return existingMessages; // 没有新消息，直接返回现有消息
+    }
+    
+    // 合并消息并按时间戳排序
+    const merged = [...existingMessages, ...trulyNewMessages];
+    
+    // 按时间戳排序（从小到大，即从旧到新）
+    merged.sort((a, b) => {
+      const timeA = Number(a.timestamp);
+      const timeB = Number(b.timestamp);
+      if (timeA !== timeB) {
+        return timeA - timeB;
+      }
+      // 如果时间戳相同，按ID排序（确保顺序稳定）
+      return a.id - b.id;
+    });
+    
+    return merged;
+  }, []);
+
+  // 加载最新一页消息（静默同步，无感知）
+  const loadLatestMessages = useCallback(async (silent: boolean = false) => {
     try {
       const pageData = await chatService.getMessagesPage(1, PAGE_SIZE);
+      
       setMessages((prevMessages) => {
+        // 使用合并逻辑，只添加新消息
+        const mergedMessages = mergeMessages(prevMessages, pageData.messages);
+        
         // 检测新消息中的@和回复
         const newMessages = pageData.messages.filter(
           (newMsg) => !prevMessages.some((oldMsg) => oldMsg.id === newMsg.id)
         );
+        
         if (newMessages.length > 0 && currentUser) {
           // 使用 setTimeout 确保状态更新后再检测
           setTimeout(() => {
@@ -175,15 +255,23 @@ const Chat: React.FC = () => {
             checkReplies(newMessages, prevMessages);
           }, 100);
         }
-        return pageData.messages;
+        
+        return mergedMessages;
       });
+      
       setMessageCount(pageData.total);
       setCurrentPage(1);
       setHasMoreMessages(pageData.totalPages > 1);
     } catch (err) {
       console.error('加载消息失败:', err);
+      // 静默失败，不显示错误给用户
+      if (!silent) {
+        setError('同步消息失败，请稍后重试');
+      }
+    } finally {
+      // no-op
     }
-  }, [currentUser, checkMentions, checkReplies]);
+  }, [currentUser, checkMentions, checkReplies, mergeMessages]);
 
   // 加载当前用户的个人资料（用于头像等）
   useEffect(() => {
@@ -205,17 +293,140 @@ const Chat: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 加载更多历史消息
+  // 从缓存中加载更早的历史消息
+  const loadOlderMessagesFromCache = useCallback((currentMessages: Message[]): Message[] | null => {
+    if (currentMessages.length === 0) {
+      return null;
+    }
+    
+    // 获取当前最早的消息时间戳和ID
+    const earliestMessage = currentMessages[0];
+    const earliestTimestamp = Number(earliestMessage.timestamp);
+    const earliestId = earliestMessage.id;
+    
+    // 从缓存中读取所有消息
+    const cached = loadCachedState();
+    if (!cached || !cached.messages || cached.messages.length === 0) {
+      return null;
+    }
+    
+    // 查找比当前最早消息更早的消息（使用时间戳和ID双重判断）
+    const olderMessages = cached.messages.filter(msg => {
+      const msgTimestamp = Number(msg.timestamp);
+      const msgId = msg.id;
+      
+      // 如果时间戳更早，或者时间戳相同但ID更小（更早的消息）
+      if (msgTimestamp < earliestTimestamp) {
+        return true;
+      }
+      if (msgTimestamp === earliestTimestamp && msgId < earliestId) {
+        return true;
+      }
+      return false;
+    });
+    
+    if (olderMessages.length === 0) {
+      return null;
+    }
+    
+    // 按时间戳和ID排序（从旧到新）
+    olderMessages.sort((a, b) => {
+      const timeA = Number(a.timestamp);
+      const timeB = Number(b.timestamp);
+      if (timeA !== timeB) {
+        return timeA - timeB;
+      }
+      return a.id - b.id;
+    });
+    
+    // 只返回最近的一页（PAGE_SIZE 条）
+    const pageMessages = olderMessages.slice(-PAGE_SIZE);
+    
+    return pageMessages;
+  }, []);
+
+  // 加载更多历史消息（优先从缓存加载）
   const loadOlderMessages = useCallback(async () => {
     if (isLoadingMore || !hasMoreMessages) {
       return;
     }
+    
     try {
       setIsLoadingMore(true);
+      
+      // 先尝试从缓存加载
+      const cachedMessages = loadOlderMessagesFromCache(messages);
+      
+      if (cachedMessages && cachedMessages.length > 0) {
+        // 从缓存加载成功
+        setMessages((prev) => {
+          const updated = [...cachedMessages, ...prev];
+          
+          // 立即保存到缓存（确保状态同步）
+          saveCachedState({
+            messages: updated,
+            messageCount,
+            currentPage,
+            hasMoreMessages: true, // 暂时设为true，下面会检查
+            timestamp: Date.now(),
+          });
+          
+          // 检查缓存中是否还有更早的消息（基于更新后的消息列表）
+          const earliestInUpdated = updated[0];
+          const cached = loadCachedState();
+          if (cached && cached.messages) {
+            const hasMore = cached.messages.some(msg => {
+              const msgTimestamp = Number(msg.timestamp);
+              const msgId = msg.id;
+              const earliestTimestamp = Number(earliestInUpdated.timestamp);
+              const earliestId = earliestInUpdated.id;
+              
+              // 如果时间戳更早，或者时间戳相同但ID更小
+              if (msgTimestamp < earliestTimestamp) {
+                return true;
+              }
+              if (msgTimestamp === earliestTimestamp && msgId < earliestId) {
+                return true;
+              }
+              return false;
+            });
+            setHasMoreMessages(hasMore);
+          } else {
+            setHasMoreMessages(false);
+          }
+          
+          return updated;
+        });
+        
+        setIsLoadingMore(false);
+        return;
+      }
+      
+      // 缓存中没有更多消息，从后端加载
       const nextPage = currentPage + 1;
       const pageData = await chatService.getMessagesPage(nextPage, PAGE_SIZE);
+      
       if (pageData.messages.length > 0) {
-        setMessages((prev) => [...pageData.messages, ...prev]);
+        // 将从后端加载的消息添加到缓存
+        setMessages((prev) => {
+          const updated = [...pageData.messages, ...prev];
+          
+          // 立即保存到缓存（不等待防抖），确保历史消息被缓存
+          // 使用最新的 messageCount（从 pageData 获取）
+          saveCachedState({
+            messages: updated,
+            messageCount: pageData.total, // 使用后端返回的总数
+            currentPage: nextPage,
+            hasMoreMessages: nextPage < pageData.totalPages,
+            timestamp: Date.now(),
+          });
+          const endTime = performance.now();
+          void endTime;
+          
+          return updated;
+        });
+        
+        setMessageCount(pageData.total); // 更新总消息数
         setCurrentPage(nextPage);
         setHasMoreMessages(nextPage < pageData.totalPages);
       } else {
@@ -226,17 +437,40 @@ const Chat: React.FC = () => {
     } finally {
       setIsLoadingMore(false);
     }
-  }, [currentPage, hasMoreMessages, isLoadingMore]);
+  }, [currentPage, hasMoreMessages, isLoadingMore, messages, loadOlderMessagesFromCache]);
 
-  // 初始化服务（只在组件首次挂载时执行）
+  // 初始化服务（延迟执行，不阻塞消息显示）
   useEffect(() => {
+    // 使用 requestIdleCallback 或 setTimeout 延迟初始化，确保消息先显示
     const init = async () => {
       try {
+        // 延迟初始化，让消息先渲染
+        await new Promise(resolve => {
+          if ('requestIdleCallback' in window) {
+            (window as any).requestIdleCallback(resolve, { timeout: 100 });
+          } else {
+            setTimeout(resolve, 0);
+          }
+        });
+        
         // 根据 II 登录状态决定是否使用带身份的 actor
         const authed = await authService.isAuthenticated();
         await chatService.initialize(authed);
-        // 如果已经从缓存渲染过一版，这里作为一次静默同步；否则仍然是首屏加载
-        await loadLatestMessages();
+        
+        // 如果有缓存数据，先显示缓存，然后静默同步后端数据
+        // 如果没有缓存，则从后端加载（但也不显示loading）
+        const hasCache = initialCachedState && initialCachedState.messages.length > 0;
+        
+        if (hasCache) {
+          // 有缓存：后台静默同步，用户无感知
+          // 进一步延迟同步，确保UI先渲染完成
+          setTimeout(() => {
+            loadLatestMessages(true); // silent = true，不显示同步状态
+          }, 100);
+        } else {
+          // 无缓存：从后端加载（但不显示loading）
+          await loadLatestMessages(false);
+        }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : '未知错误';
         let userMessage = '初始化失败，请检查网络连接';
@@ -265,14 +499,18 @@ const Chat: React.FC = () => {
           userMessage = errorMessage;
         }
         
-        setError(userMessage);
-        console.error('初始化失败:', err);
-      } finally {
-        // 仅当仍处于加载状态时才更新 loading，避免覆盖缓存恢复时的状态
-        setLoading((prev) => (prev ? false : prev));
+        // 只有在没有缓存数据时才显示错误
+        const hasCache = initialCachedState && initialCachedState.messages.length > 0;
+        if (!hasCache) {
+          setError(userMessage);
+        } else {
+          // 有缓存时，静默失败，不打扰用户
+          console.error('[Chat] 后台同步失败（不影响已缓存的消息）:', err);
+        }
       }
     };
 
+    // 立即启动初始化（但内部会延迟执行）
     init();
 
     return () => {
@@ -281,7 +519,7 @@ const Chat: React.FC = () => {
         refreshIntervalRef.current = null;
       }
     };
-  }, [loadLatestMessages]);
+  }, [loadLatestMessages, initialCachedState]);
 
   // 检查加密功能可用性
   useEffect(() => {
@@ -292,10 +530,6 @@ const Chat: React.FC = () => {
     const reason = encryptionService.getUnavailableReason();
     if (!cryptoAvailable && reason) {
       console.warn('[App] Web Crypto API 不可用:', reason);
-    } else if (!encryptionEnabled) {
-      console.log('[App] 端到端加密未开启（默认关闭）');
-    } else {
-      console.log('[App] 端到端加密已开启');
     }
   }, []);
 
@@ -314,11 +548,11 @@ const Chat: React.FC = () => {
     const channel = new BC('icp-chat-message-sync');
     broadcastChannelRef.current = channel;
 
-    channel.onmessage = async (event: MessageEvent) => {
+      channel.onmessage = async (event: MessageEvent) => {
       const data = event.data;
       if (data && data.type === 'NEW_MESSAGE') {
-        // 收到其他窗口的新消息通知时，强制刷新最新一页消息
-        loadLatestMessages();
+        // 收到其他窗口的新消息通知时，静默刷新最新一页消息
+        loadLatestMessages(true); // 静默同步
       } else if (data && data.type === 'PROFILE_UPDATED') {
         // 收到 Profile 更新通知时，重新加载当前用户的 Profile
         try {
@@ -349,10 +583,11 @@ const Chat: React.FC = () => {
       refreshIntervalRef.current = null;
     }
 
-    if (autoRefresh && !loading && currentPage === 1) {
-      // 为了多设备之间尽量“准实时”同步，这里使用较短的轮询间隔
+    if (autoRefresh && currentPage === 1) {
+      // 为了多设备之间尽量"准实时"同步，这里使用较短的轮询间隔
+      // 使用静默模式，用户无感知
       refreshIntervalRef.current = setInterval(() => {
-        loadLatestMessages();
+        loadLatestMessages(true); // silent = true，后台静默同步
       }, 3000);
     }
 
@@ -362,18 +597,18 @@ const Chat: React.FC = () => {
         refreshIntervalRef.current = null;
       }
     };
-  }, [autoRefresh, currentPage, loadLatestMessages, loading]);
+  }, [autoRefresh, currentPage, loadLatestMessages]);
 
   // 窗口获得焦点 / 页面从后台切回前台时，主动拉一次最新消息（兼容不同设备之间的同步）
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        loadLatestMessages();
+        loadLatestMessages(true); // 静默同步
       }
     };
 
     const handleFocus = () => {
-      loadLatestMessages();
+      loadLatestMessages(true); // 静默同步
     };
 
     window.addEventListener('focus', handleFocus);
@@ -486,15 +721,8 @@ const Chat: React.FC = () => {
     }
   };
 
-  // 如果没有缓存且正在首屏加载数据，用 loading 覆盖主界面，避免看到空白/空状态闪烁
-  if (loading && messages.length === 0) {
-    return (
-      <div className="app-loading">
-        <div className="loading-spinner"></div>
-        <p>正在加载历史消息...</p>
-      </div>
-    );
-  }
+  // 取消loading提示，始终直接显示聊天界面
+  // 如果有缓存，立即显示；如果没有缓存，显示空状态（后台会静默加载）
 
   return (
     <div className="app">
@@ -544,7 +772,7 @@ const Chat: React.FC = () => {
               />
               <span>自动刷新</span>
             </label>
-            <button className="refresh-button" onClick={() => loadLatestMessages()} title="手动刷新消息（回到最新）">
+            <button className="refresh-button" onClick={() => loadLatestMessages(true)} title="手动刷新消息（回到最新）">
               🔄
             </button>
           </div>

@@ -96,18 +96,14 @@ const Wallet: React.FC = () => {
 
   const loadOnchainHistory = async (reset = false) => {
     if (onchainLoading) {
-      console.log('[Wallet] loadOnchainHistory: 已在加载中，跳过');
       return;
     }
-    console.log('[Wallet] loadOnchainHistory: 开始加载，reset =', reset);
     try {
       setOnchainLoading(true);
       setOnchainError(null);
 
       const cursor = reset ? null : onchainCursor;
-      console.log('[Wallet] loadOnchainHistory: 调用 getIcpTxHistory, cursor =', cursor);
       const page = await getIcpTxHistory(cursor ?? null, 20);
-      console.log('[Wallet] loadOnchainHistory: 获取到', page.items.length, '条记录');
 
       setOnchainRecords((prev) =>
         reset ? page.items : [...prev, ...page.items],

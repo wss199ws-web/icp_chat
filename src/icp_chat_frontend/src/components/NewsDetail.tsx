@@ -24,10 +24,8 @@ const NewsDetail: React.FC = () => {
         // 首先尝试从路由state中获取（如果是从列表页跳转过来的）
         const stateNews = (location.state as any)?.newsItem as NewsItem | undefined;
         if (stateNews && stateNews.id === id) {
-          console.log('[NewsDetail] 从路由state获取新闻数据');
           // 即使从state获取，也要检查内容是否完整，如果不完整则尝试获取
           if (stateNews.content.length < 500 && stateNews.url && stateNews.url !== '#') {
-            console.log('[NewsDetail] 内容较短，尝试从服务获取完整内容...');
             const fullNews = await newsService.getNewsById(id);
             if (fullNews && fullNews.content.length > stateNews.content.length) {
               setNews(fullNews);
@@ -42,7 +40,6 @@ const NewsDetail: React.FC = () => {
         }
         
         // 如果路由state中没有，则从服务获取
-        console.log('[NewsDetail] 从服务获取新闻数据');
         const newsData = await newsService.getNewsById(id);
         setNews(newsData);
       } catch (err) {

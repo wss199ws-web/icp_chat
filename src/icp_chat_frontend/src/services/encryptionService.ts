@@ -155,7 +155,6 @@ class EncryptionService {
             // 将 Base64 字符串转换为 ArrayBuffer
             const keyData = this.base64ToArrayBuffer(storedKey);
             this.key = await this.importKey(keyData);
-            console.log('[EncryptionService] 从本地存储加载密钥成功');
             return this.key;
           } catch (error) {
             console.warn('[EncryptionService] 加载密钥失败，将生成新密钥:', error);
@@ -165,14 +164,12 @@ class EncryptionService {
         }
 
         // 生成新密钥
-        console.log('[EncryptionService] 生成新的加密密钥');
         this.key = await this.generateKey();
         
         // 保存密钥到 localStorage
         const keyData = await this.exportKey(this.key);
         const keyBase64 = this.arrayBufferToBase64(keyData);
         localStorage.setItem(STORAGE_KEY, keyBase64);
-        console.log('[EncryptionService] 密钥已保存到本地存储');
 
         return this.key;
       } finally {
@@ -191,7 +188,6 @@ class EncryptionService {
     this.keyPromise = null;
     localStorage.removeItem(STORAGE_KEY);
     await this.getKey();
-    console.log('[EncryptionService] 密钥已重置');
   }
 
   /**
@@ -203,7 +199,6 @@ class EncryptionService {
       const key = await this.getKey();
       const keyData = await this.exportKey(key);
       const keyBase64 = this.arrayBufferToBase64(keyData);
-      console.log('[EncryptionService] 密钥导出成功');
       return keyBase64;
     } catch (error) {
       console.error('[EncryptionService] 密钥导出失败:', error);
@@ -255,8 +250,6 @@ class EncryptionService {
       const keyDataForStorage = await this.exportKey(importedKey);
       const keyBase64ForStorage = this.arrayBufferToBase64(keyDataForStorage);
       localStorage.setItem(STORAGE_KEY, keyBase64ForStorage);
-      
-      console.log('[EncryptionService] 密钥导入成功');
     } catch (error) {
       console.error('[EncryptionService] 密钥导入失败:', error);
       const errorMessage = error instanceof Error ? error.message : '未知错误';
@@ -271,7 +264,6 @@ class EncryptionService {
     try {
       // 本地开发环境不加密，直接返回原文
       if (!shouldEnableEncryption()) {
-        console.log('[EncryptionService] 本地环境，跳过加密');
         return text;
       }
 
@@ -341,7 +333,6 @@ class EncryptionService {
 
       // 本地开发环境：如果消息是加密的，尝试解密（可能是从生产环境来的数据）
       if (!shouldEnableEncryption()) {
-        console.log('[EncryptionService] 本地环境，尝试解密（可能是生产环境数据）');
         // 在本地环境下，如果 Web Crypto API 可用，尝试解密
         // 如果不可用或解密失败，返回提示信息
         if (!this.checkCryptoAvailable() || !crypto.subtle) {
@@ -489,7 +480,6 @@ class EncryptionService {
   enableEncryption(): void {
     if (typeof window !== 'undefined') {
       localStorage.setItem(ENCRYPTION_ENABLED_KEY, 'true');
-      console.log('[EncryptionService] 端到端加密已开启');
     }
   }
 
@@ -499,7 +489,6 @@ class EncryptionService {
   disableEncryption(): void {
     if (typeof window !== 'undefined') {
       localStorage.setItem(ENCRYPTION_ENABLED_KEY, 'false');
-      console.log('[EncryptionService] 端到端加密已关闭');
     }
   }
 
@@ -687,7 +676,6 @@ class EncryptionService {
       const keyData = this.base64ToArrayBuffer(keyBase64);
       const groupKey = await this.importKey(keyData);
       this.groupKeys.set(groupId, groupKey);
-      console.log(`[EncryptionService] 群组 ${groupId} 密钥已设置`);
     } catch (error) {
       console.error('[EncryptionService] 设置群组密钥失败:', error);
       throw new Error('设置群组密钥失败');

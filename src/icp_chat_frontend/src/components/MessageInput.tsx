@@ -153,10 +153,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
       // 如果图片超过2MB，先压缩
       let processedFile = file;
       if (file.size > 2 * 1024 * 1024) {
-        console.log('[MessageInput] 图片超过2MB，开始压缩...');
         const compressedBlob = await compressImage(file);
         processedFile = new File([compressedBlob], file.name, { type: file.type });
-        console.log(`[MessageInput] 压缩完成，原始: ${(file.size / 1024 / 1024).toFixed(2)}MB -> ${(processedFile.size / 1024 / 1024).toFixed(2)}MB`);
       }
 
       setSelectedImage(processedFile);
@@ -217,17 +215,15 @@ const MessageInput: React.FC<MessageInputProps> = ({
     if (base64Image) {
       // 将 base64 转换为 Blob 并上传
       const blob = dataURLtoBlob(base64Image.dataUrl);
-      if (blob) {
-        setUploading(true);
-        try {
-          // 如果图片超过2MB，先压缩
-          let processedBlob = blob;
-          if (blob.size > 2 * 1024 * 1024) {
-            console.log('[MessageInput] Base64图片超过2MB，开始压缩...');
-            const file = new File([blob], 'image.jpg', { type: blob.type || 'image/jpeg' });
-            processedBlob = await compressImage(file);
-            console.log(`[MessageInput] 压缩完成，原始: ${(blob.size / 1024 / 1024).toFixed(2)}MB -> ${(processedBlob.size / 1024 / 1024).toFixed(2)}MB`);
-          }
+          if (blob) {
+            setUploading(true);
+            try {
+              // 如果图片超过2MB，先压缩
+              let processedBlob = blob;
+              if (blob.size > 2 * 1024 * 1024) {
+                const file = new File([blob], 'image.jpg', { type: blob.type || 'image/jpeg' });
+                processedBlob = await compressImage(file);
+              }
           
           const result = await chatService.uploadImage(processedBlob);
           if (result.success && result.imageId !== undefined) {

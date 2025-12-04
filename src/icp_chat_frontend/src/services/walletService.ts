@@ -21,7 +21,7 @@ const LEDGER_CANISTER_ID_MAINNET = 'ryjl3-tyaaa-aaaaa-aaaba-cai';
 // 注意：虽然 Ledger 期望 blob 类型，但在 Candid IDL 中 blob 用 Vec<Nat8> 表示
 // 关键是要确保传递 Uint8Array，让 @dfinity/agent 正确处理编码
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-// const ledgerIdlFactory = ({ IDL }: { IDL: IDLType }) => {
+// const ledgerIdlFactory = ({ IDL }: { IDL: IDLType }) => ~{
 //   // AccountIdentifier 是 32 字节，在 Candid 中表示为 Vec<Nat8>
 //   // 虽然 Ledger 内部期望 blob，但 IDL 定义使用 Vec<Nat8>
 //   const AccountIdentifier = IDL.Vec(IDL.Nat8);
@@ -154,7 +154,7 @@ export async function getAccountBalance(): Promise<bigint> {
     if (!isAuthenticated) {
       throw new Error('请先登录以查询余额。余额查询需要 Internet Identity 身份验证。');
     }
-
+    
     // 通过后端 canister 获取余额
     const actor = await createActor();
     const balance = await actor.getIcpBalance();
@@ -468,9 +468,7 @@ export async function getIcpTxHistory(
   const safeLimit = BigInt(Math.min(limit, 100));
 
   try {
-    console.log('[WalletService] getIcpTxHistory: 开始，cursor =', rawCursor, 'limit =', limit);
     const actor = await createActor();
-    console.log('[WalletService] getIcpTxHistory: actor 创建成功');
 
     // 兼容老版本后端：如果还没有部署带 getIcpTxHistory 的 canister，给出友好提示
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -479,14 +477,11 @@ export async function getIcpTxHistory(
       console.error('[WalletService] getIcpTxHistory: 方法不存在');
       throw new Error('当前后端版本未提供交易历史接口，请先升级/重新部署后端 canister。');
     }
-    console.log('[WalletService] getIcpTxHistory: 方法存在，准备调用');
     const cursor: bigint | null = rawCursor ?? null;
     const cursorOpt: [] | [bigint] =
       cursor === null ? [] : [cursor as bigint];
-
-    console.log('[WalletService] getIcpTxHistory: 调用后端接口，cursorOpt =', cursorOpt, 'limit =', safeLimit);
+    
     const page = await anyActor.getIcpTxHistory(cursorOpt, safeLimit);
-    console.log('[WalletService] getIcpTxHistory: 后端返回', page.txs?.length || 0, '条记录');
     return parseHistoryPage(page);
   } catch (error) {
     console.error('[WalletService] 获取交易历史失败:', error);

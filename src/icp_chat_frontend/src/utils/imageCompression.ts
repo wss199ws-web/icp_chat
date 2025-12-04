@@ -24,8 +24,6 @@ export async function compressImage(
     return file;
   }
 
-  console.log(`[ImageCompression] 开始压缩图片，原始大小: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
-
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -72,9 +70,6 @@ export async function compressImage(
 
               // 如果文件大小符合要求，或者质量已经很低了，返回结果
               if (blob.size <= maxSize || quality <= MIN_QUALITY) {
-                console.log(
-                  `[ImageCompression] 压缩完成，最终大小: ${(blob.size / 1024 / 1024).toFixed(2)}MB, 质量: ${quality.toFixed(2)}`
-                );
                 resolve(blob);
               } else {
                 // 继续降低质量

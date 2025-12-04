@@ -48,7 +48,6 @@ class ChatService {
       } else {
         this.actor = await createAnonymousActor();
       }
-      console.log('[ChatService] 初始化成功');
     } catch (error) {
       console.error('[ChatService] 初始化失败:', error);
       throw error;
@@ -61,7 +60,6 @@ class ChatService {
     }
 
     try {
-      console.log(`[ChatService] 开始上传图片，大小: ${imageBlob.size} bytes, 类型: ${imageBlob.type}`);
       const arrayBuffer = await imageBlob.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
 
@@ -81,16 +79,14 @@ class ChatService {
 
   private async uploadImageDirect(uint8Array: Uint8Array): Promise<{ success: boolean; imageId?: number; error?: string }> {
     const bytes = Array.from(uint8Array);
-    console.log(`[ChatService] 走直传路径，字节长度: ${bytes.length}`);
     const result = await this.actor!.uploadImage(bytes);
-    if ('ok' in result) {
-      const imageId = Number(result.ok);
-      console.log(`[ChatService] 图片上传成功，imageId: ${imageId}`);
-      return {
-        success: true,
-        imageId,
-      };
-    }
+      if ('ok' in result) {
+        const imageId = Number(result.ok);
+        return {
+          success: true,
+          imageId,
+        };
+      }
     console.error(`[ChatService] 图片上传失败: ${result.err}`);
     return {
       success: false,
@@ -102,7 +98,6 @@ class ChatService {
     uint8Array: Uint8Array,
     mimeType: string
   ): Promise<{ success: boolean; imageId?: number; error?: string }> {
-    console.log('[ChatService] 使用分块上传策略');
     const startResult = await this.actor!.startImageUpload(BigInt(uint8Array.length), mimeType);
     if ('err' in startResult) {
       console.error('[ChatService] 创建上传会话失败:', startResult.err);
@@ -118,7 +113,6 @@ class ChatService {
       const end = Math.min(offset + this.CHUNK_SIZE, uint8Array.length);
       const chunk = uint8Array.slice(offset, end);
       const isFinal = end >= uint8Array.length;
-      console.log(`[ChatService] 上传分块 offset=${offset}, end=${end}, isFinal=${isFinal}`);
       const chunkResult = await this.actor!.uploadImageChunk(uploadId, Array.from(chunk), isFinal);
       if ('err' in chunkResult) {
         console.error('[ChatService] 分块上传失败:', chunkResult.err);
@@ -132,7 +126,6 @@ class ChatService {
         const optImageId = chunkResult.ok;
         if (Array.isArray(optImageId) && optImageId.length > 0) {
           const imageId = Number(optImageId[0]);
-          console.log(`[ChatService] 分块上传完成，imageId: ${imageId}`);
           return {
             success: true,
             imageId,
@@ -161,9 +154,7 @@ class ChatService {
     }
 
     try {
-      console.log(`[ChatService] 开始获取图片 ID ${imageId}`);
       const result = await this.actor!.getImage(BigInt(imageId));
-      console.log(`[ChatService] getImage 返回结果:`, result);
       
       // getImage 返回 Opt<Vec<Nat8>>，在 JavaScript 中表示为 [] 或 [number[]]
       if (!result || !Array.isArray(result) || result.length === 0) {
@@ -178,11 +169,9 @@ class ChatService {
         return null;
       }
       
-      console.log(`[ChatService] 获取到图片字节数组，长度: ${bytes.length}`);
       // 将字节数组转换为 Blob
       const uint8Array = new Uint8Array(bytes);
       const blob = new Blob([uint8Array]);
-      console.log(`[ChatService] 成功获取图片 ID ${imageId}, 大小: ${blob.size} bytes`);
       return blob;
     } catch (error) {
       console.error(`[ChatService] 获取图片 ID ${imageId} 失败:`, error);
@@ -201,7 +190,6 @@ class ChatService {
       if (text && text.trim().length > 0) {
         try {
           encryptedText = await encryptionService.encrypt(text);
-          console.log('[ChatService] 消息已加密');
         } catch (error) {
           console.error('[ChatService] 加密失败:', error);
           return {
@@ -214,8 +202,6 @@ class ChatService {
       // ICP 中 Opt<T> 类型在 JavaScript 中表示为数组：[] 表示 null，[value] 表示 some(value)
       const imageIdOpt: [] | [bigint] = imageId !== undefined && imageId !== null ? [BigInt(imageId)] : [];
       const replyToOpt: [] | [bigint] = replyTo !== undefined && replyTo !== null ? [BigInt(replyTo)] : [];
-      const textPreview = text.length > 50 ? `${text.substring(0, 50)}...` : text;
-      console.log(`[ChatService] 发送消息，text: "${textPreview}", imageId: ${imageId}, replyTo: ${replyTo}`);
       const senderId = getClientId();
       const result = await this.actor!.sendMessage(encryptedText, imageIdOpt, senderId, replyToOpt);
       if ('ok' in result) {
@@ -239,7 +225,6 @@ class ChatService {
           decryptedText = msg.text;
         }
         
-        console.log(`[ChatService] 消息发送成功，消息 ID: ${Number(msg.id)}, imageId: ${imageIdValue}, 原始 imageId:`, msg.imageId);
         const authorAvatarValue = Array.isArray(msg.authorAvatar) && msg.authorAvatar.length > 0 ? msg.authorAvatar[0] : null;
         const authorColorValue = Array.isArray(msg.authorColor) && msg.authorColor.length > 0 ? msg.authorColor[0] : null;
         const senderPrincipalValue = Array.isArray(msg.senderPrincipal) && msg.senderPrincipal.length > 0 ? String(msg.senderPrincipal[0]) : null;
@@ -297,12 +282,10 @@ class ChatService {
 
     // 检查缓存
     if (!forceRefresh && this.isMessagesCacheValid() && this.messagesCache) {
-      console.log('[ChatService] 从缓存获取消息');
       return this.messagesCache.messages;
     }
-
+    
     try {
-      console.log('[ChatService] 从服务器获取消息');
       const messages = await this.actor!.getLastMessages(BigInt(n));
       // 并行解密所有消息
       const decryptedMessages = await Promise.all(
@@ -358,7 +341,6 @@ class ChatService {
       console.error('获取消息失败:', error);
       // 如果出错，尝试返回缓存数据
       if (this.messagesCache) {
-        console.log('[ChatService] 使用缓存数据作为降级方案');
         return this.messagesCache.messages;
       }
       return [];
@@ -547,7 +529,6 @@ class ChatService {
       const keyBase64 = await encryptionService.exportKeyString();
       const result = await this.actor!.saveEncryptionKey(keyBase64);
       if ('ok' in result) {
-        console.log('[ChatService] 密钥同步成功');
         return { success: true };
       } else {
         console.error('[ChatService] 密钥同步失败:', result.err);
@@ -589,7 +570,6 @@ class ChatService {
       const result = await this.actor!.getEncryptionKey();
       if (result && result.length > 0) {
         const keyBase64 = result[0];
-        console.log('[ChatService] 从服务器获取密钥成功');
         return { success: true, key: keyBase64 };
       } else {
         return { success: false, error: '服务器上没有保存的密钥' };
@@ -611,7 +591,6 @@ class ChatService {
       const result = await this.getEncryptionKeyFromServer();
       if (result.success && result.key) {
         await encryptionService.importKeyString(result.key);
-        console.log('[ChatService] 密钥恢复成功');
         return { success: true };
       } else {
         return { success: false, error: result.error || '无法获取密钥' };
@@ -644,7 +623,6 @@ class ChatService {
 
       const result = await this.actor!.deleteEncryptionKey();
       if (result) {
-        console.log('[ChatService] 服务器密钥删除成功');
         return { success: true };
       } else {
         return { success: false, error: '删除失败' };
@@ -681,7 +659,6 @@ class ChatService {
       if ('ok' in result) {
         // 同时保存到本地缓存
         await encryptionService.setGroupKey(groupId, keyBase64);
-        console.log(`[ChatService] 群组 ${groupId} 密钥设置成功`);
         return { success: true };
       } else {
         console.error(`[ChatService] 群组 ${groupId} 密钥设置失败:`, result.err);
@@ -719,7 +696,6 @@ class ChatService {
         if (keyBase64) {
           // 同时保存到本地缓存
           await encryptionService.setGroupKey(groupId, keyBase64);
-          console.log(`[ChatService] 群组 ${groupId} 密钥获取成功`);
           return { success: true, key: keyBase64 };
         }
       }
@@ -752,7 +728,6 @@ class ChatService {
 
       const result = await this.actor!.deleteGroupKey(groupId);
       if (result) {
-        console.log(`[ChatService] 群组 ${groupId} 密钥删除成功`);
         return { success: true };
       } else {
         return { success: false, error: '删除失败' };
