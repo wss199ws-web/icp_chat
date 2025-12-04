@@ -12,6 +12,10 @@ import Blob "mo:base/Blob";
 import Hash "mo:base/Hash";
 import Buffer "mo:base/Buffer";
 import Nat8 "mo:base/Nat8";
+import Types "./Types";
+import Wallet "./Wallet";
+import Chat "./Chat";
+import Image "./Image";
 
 // 去掉 persistent / transient，用普通 actor 即可
 actor ICPChat {
@@ -23,36 +27,13 @@ actor ICPChat {
   private let MAX_IMAGE_SIZE : Nat = 10_000_000; // 单张图片最大大小（10MB）
   private let MAX_IMAGES : Nat = 1000;         // 最大图片数量
 
-  public type Message = {
-    id : Nat;
-    author : Text;      // 展示用昵称（发送时的快照）
-    senderId : Text;    // 稳定的发送者ID（前端生成的 clientId）
-    senderPrincipal : ?Principal; // 发送者的 Principal（如果是已登录用户），用于更新历史消息
-    authorAvatar : ?Text; // 头像（发送时的快照，从 UserProfile.avatar 取）
-    authorColor : ?Text;  // 昵称颜色（发送时的快照，从 UserProfile.color 取）
-    text : Text;
-    timestamp : Int;
-    imageId : ?Nat; // 图片ID，如果有图片则不为null
-    replyTo : ?Nat; // 回复的消息ID，如果有回复则不为null
-  };
-
+  // 类型别名，统一转发到 `Types` 模块，保证 Candid 接口保持不变
+  public type Message = Types.Message;
   public type SendMessageResult = Result.Result<Message, Text>;
-
-  public type MessagePage = {
-    messages : [Message];
-    total : Nat;
-    page : Nat;
-    pageSize : Nat;
-    totalPages : Nat;
-  };
+  public type MessagePage = Types.MessagePage;
 
   // 用户资料类型（方案 B：基于 Principal 的个人信息配置）
-  public type UserProfile = {
-    nickname : Text;
-    avatar : ?Text; // 头像URL 或 标识
-    color : ?Text;  // 主题色 / 昵称颜色
-    bio : ?Text;    // 个性签名
-  };
+  public type UserProfile = Types.UserProfile;
 
   // 持久化状态用 stable 即可
   stable var messages : [Message] = [];
@@ -64,252 +45,27 @@ actor ICPChat {
   // 注意：HashMap 不能直接 stable，需要序列化/反序列化
   var images : HashMap.HashMap<Nat, Blob> = HashMap.HashMap<Nat, Blob>(0, Nat.equal, Hash.hash);
   
-  type UploadSession = {
-    buffer : Buffer.Buffer<Nat8>;
-    var receivedSize : Nat;
-    totalSize : Nat;
-    mimeType : Text;
-  };
+  type UploadSession = Types.UploadSession;
 
-  // 主网 ICP Ledger canister（余额、转账等）
-  type LedgerService = actor {
-    icrc1_balance_of : shared { owner : Principal; subaccount : ?Blob } -> async Nat;
-  };
-
-  // ICP Ledger Index Canister（交易历史查询）
-  // 注意：ICP Ledger 可能没有标准的 Index Canister，或者接口定义不同
-  // 当前实现尝试使用 Index Canister，如果不可用则返回空结果
-  // 主网 Index Canister ID: qhbym-qaaaa-aaaaa-aaafq-cai（可能不正确）
-  type LedgerIndexService = actor {
-    get_account_transactions : shared query {
-      account : { owner : Principal; subaccount : ?Blob };
-      start : ?Nat64;
-      max_results : Nat64;
-    } -> async {
-      transactions : [{
-        id : Nat64;
-        transaction : {
-          kind : Text;
-          mint : ?{ to : { owner : Principal; subaccount : ?Blob }; amount : Nat64 };
-          burn : ?{ from : { owner : Principal; subaccount : ?Blob }; amount : Nat64 };
-          transfer : ?{
-            from : { owner : Principal; subaccount : ?Blob };
-            to : { owner : Principal; subaccount : ?Blob };
-            amount : Nat64;
-            fee : ?Nat64;
-            memo : ?Blob;
-          };
-          approve : ?{ from : { owner : Principal; subaccount : ?Blob }; spender : { owner : Principal; subaccount : ?Blob }; amount : Nat64 };
-        };
-        timestamp : Nat64;
-      }];
-      oldest_tx_id : ?Nat64;
-      balance : Nat64;
-    };
-  };
-
-  // 获取 Ledger canister 的 actor 引用
-  func ledger() : LedgerService {
-    // 这里直接写主网 Ledger 的 canister id
-    actor ("ryjl3-tyaaa-aaaaa-aaaba-cai");
-  };
-
-  // 获取 Ledger Index canister 的 actor 引用
-  func ledgerIndex() : LedgerIndexService {
-    // 主网 ICP Ledger Index Canister ID
-    actor ("qhbym-qaaaa-aaaaa-aaafq-cai");
-  };
+  // ========== ICP 钱包相关，对外接口 ==========
 
   // 查询当前 caller 的 ICP 余额（单位：e8s）
   public shared ({ caller }) func getIcpBalance() : async Nat {
-    let account = {
-      owner = caller;
-      subaccount = null; // 默认子账户 0
-    };
-
-    // 这里用 ledger() 拿到远程 actor，再调用 icrc1_balance_of
-    await ledger().icrc1_balance_of(account)
+    await Wallet.getIcpBalance(caller)
   };
 
-  // ========== ICP 链上交易历史（预留接口）==========
-
-  // 交易方向（相对于当前 caller）
-  public type IcpTxDirection = {
-    #send;
-    #receive;
-  };
-
-  // 精简后的交易记录结构，供前端展示使用
-  public type IcpTxRecord = {
-    index : Nat;          // 交易在账本中的索引（如果可用）
-    from : Text;          // 发送方地址（Principal 或 Account 文本）
-    to : Text;            // 接收方地址
-    amount : Nat;         // 金额（单位：e8s）
-    timestamp : Int;      // 时间戳（纳秒）
-    memo : ?Text;         // 备注（如果有的话，做简化后的文本表达）
-    direction : IcpTxDirection; // 相对当前 caller 是转出还是转入
-  };
-
-  // 分页返回结构，支持前端“加载更多”
-  public type IcpTxHistoryPage = {
-    txs : [IcpTxRecord];
-    nextCursor : ?Nat;
-  };
+  // 交易相关类型同样从 Types 中导出，便于复用
+  public type IcpTxDirection = Types.IcpTxDirection;
+  public type IcpTxRecord = Types.IcpTxRecord;
+  public type IcpTxHistoryPage = Types.IcpTxHistoryPage;
 
   // 获取当前 caller 的 ICP 交易历史（完整链上记录，分页）
   //
   // 说明：
   // - cursor: 上一页返回的 nextCursor（作为 start 参数），首次调用传 null
   // - limit: 期望返回的最大条数，后端限制最多 100 条
-  //
-  // 注意：当前使用 ICP Ledger Index Canister 查询，如果 Index Canister 不可用，
-  // 将返回空结果。需要确保 Index Canister ID 正确且可用。
   public shared ({ caller }) func getIcpTxHistory(cursor : ?Nat, limit : Nat) : async IcpTxHistoryPage {
-    let account = {
-      owner = caller;
-      subaccount = null; // 默认子账户 0
-    };
-
-    // 限制每页最多 100 条
-    let maxResults = if (limit > 100) { 100 } else { limit };
-    let maxResults64 = Nat64.fromNat(maxResults);
-
-    // cursor 转换为 start（Nat64），如果为 null 则从最新开始
-    let startOpt : ?Nat64 = switch (cursor) {
-      case null { null };
-      case (?c) { ?Nat64.fromNat(c) };
-    };
-
-    // 注意：当前 Index Canister 查询可能不可用
-    // 暂时注释掉，直接返回空结果
-    // 如果需要查询交易历史，需要：
-    // 1. 确认正确的 Index Canister ID
-    // 2. 验证 Index Canister 接口定义是否匹配
-    // 3. 或使用其他方式查询交易历史
-    /*
-    try {
-      // 调用 Ledger Index Canister 查询交易历史
-      // 注意：如果 Index Canister 不存在或接口不匹配，这里会抛出错误
-      let indexResult = await ledgerIndex().get_account_transactions({
-        account = account;
-        start = startOpt;
-        max_results = maxResults64;
-      });
-
-      // 转换 Index Canister 返回的交易记录为我们的格式
-      var txs : [IcpTxRecord] = [];
-      var nextCursorOpt : ?Nat = null;
-
-      for (tx in indexResult.transactions.vals()) {
-        switch (tx.transaction) {
-          case ({ transfer = ?transferData }) {
-            // 转账交易
-            let fromPrincipal = Principal.toText(transferData.from.owner);
-            let toPrincipal = Principal.toText(transferData.to.owner);
-            
-            // 判断方向：如果 from 是当前 caller，则是转出；如果 to 是当前 caller，则是转入
-            let isFromCaller = Principal.equal(transferData.from.owner, caller);
-            let isToCaller = Principal.equal(transferData.to.owner, caller);
-            
-            // 只显示与当前账户相关的交易
-            if (isFromCaller or isToCaller) {
-              let direction : IcpTxDirection = if (isFromCaller) { #send } else { #receive };
-              let memoOpt : ?Text = switch (transferData.memo) {
-                case null { null };
-                case (?memoBlob) {
-                  // 将 Blob 转换为文本（简化处理：显示为十六进制）
-                  let memoBytes = Blob.toArray(memoBlob);
-                  if (memoBytes.size() == 0) {
-                    null;
-                  } else {
-                    // 显示为十六进制字符串
-                    var hexMemo = "";
-                    for (byte in memoBytes.vals()) {
-                      let byteVal = Nat8.toNat(byte);
-                      let hex = Nat.toText(byteVal);
-                      // 确保是两位十六进制
-                      if (hex.size() == 1) {
-                        hexMemo := hexMemo # "0" # hex;
-                      } else {
-                        hexMemo := hexMemo # hex;
-                      };
-                    };
-                    ?("0x" # hexMemo);
-                  };
-                };
-              };
-
-              let txRecord : IcpTxRecord = {
-                index = Nat64.toNat(tx.id);
-                from = fromPrincipal;
-                to = toPrincipal;
-                amount = Nat64.toNat(transferData.amount);
-                timestamp = Int64.toInt(Int64.fromNat64(tx.timestamp));
-                memo = memoOpt;
-                direction = direction;
-              };
-              txs := Array.append(txs, [txRecord]);
-            };
-          };
-          case ({ mint = ?mintData }) {
-            // Mint 交易（通常是系统操作，可以忽略或特殊处理）
-            // 这里暂时跳过
-          };
-          case ({ burn = ?burnData }) {
-            // Burn 交易（销毁代币）
-            // 这里暂时跳过
-          };
-          case ({ approve = ?approveData }) {
-            // Approve 交易（授权）
-            // 这里暂时跳过
-          };
-          case (_) {
-            // 其他类型交易，跳过
-          };
-        };
-      };
-
-      // 设置下一页游标（使用 oldest_tx_id）
-      nextCursorOpt := switch (indexResult.oldest_tx_id) {
-        case null { null };
-        case (?oldestId) {
-          if (txs.size() >= maxResults) {
-            ?Nat64.toNat(oldestId);
-          } else {
-            null; // 如果返回的记录数少于请求数，说明已经到底了
-          };
-        };
-      };
-
-      {
-        txs = txs;
-        nextCursor = nextCursorOpt;
-      };
-    } catch (e) {
-      // 如果 Index Canister 查询失败，返回空结果
-      {
-        txs = [];
-        nextCursor = null;
-      };
-    };
-    */
-    
-    // 暂时返回空结果
-    // TODO: 实现真实的交易历史查询
-    // 需要确认正确的 Index Canister ID 和接口定义
-    {
-      txs = [];
-      nextCursor = null;
-    };
-  };
-
-  private func newUploadSession(totalSize : Nat, mimeType : Text) : UploadSession {
-    {
-      buffer = Buffer.Buffer<Nat8>(Nat.min(totalSize, 1024));
-      var receivedSize = 0;
-      totalSize = totalSize;
-      mimeType = mimeType;
-    };
+    await Wallet.getIcpTxHistory(caller, cursor, limit)
   };
 
   var uploadSessions : HashMap.HashMap<Nat, UploadSession> = HashMap.HashMap<Nat, UploadSession>(0, Nat.equal, Hash.hash);
@@ -369,142 +125,47 @@ actor ICPChat {
     // 注意：messages 是 stable var，会自动恢复，不需要手动处理
   };
 
-  // 验证消息文本（这里简单用非空 + 长度限制，避免 trim 的版本差异问题）
-  private func validateMessage(text : Text, imageId : ?Nat) : Result.Result<Text, Text> {
-    // 如果既没有文本也没有图片，则返回错误
-    if (Text.size(text) == 0 and imageId == null) {
-      return #err("消息内容不能为空");
-    };
-    if (Text.size(text) > MAX_MESSAGE_LENGTH) {
-      return #err("消息长度不能超过 " # Nat.toText(MAX_MESSAGE_LENGTH) # " 个字符");
-    };
-    #ok(text)
-  };
-  
-  // 验证图片大小
-  private func validateImage(blob : Blob) : Result.Result<Blob, Text> {
-    let bytes = Blob.toArray(blob);
-    let size = bytes.size();
-    if (size == 0) {
-      return #err("图片不能为空");
-    };
-    if (size > MAX_IMAGE_SIZE) {
-      return #err("图片大小不能超过 " # Nat.toText(MAX_IMAGE_SIZE / 1_000_000) # "MB");
-    };
-    #ok(blob)
-  };
-  
-  // 清理旧图片（当超过上限时）
-  private func cleanupOldImages() {
-    let count = images.size();
-    if (count >= MAX_IMAGES) {
-      // 删除最旧的图片（这里简化处理，删除前100张）
-      let deleteCount : Nat = 100;
-      var deleted : Nat = 0;
-      var keysToDelete : [Nat] = [];
-      for ((id, _) in images.entries()) {
-        if (deleted < deleteCount) {
-          keysToDelete := Array.append(keysToDelete, [id]);
-          deleted += 1;
-        };
-      };
-      for (id in keysToDelete.vals()) {
-        images.delete(id);
-      };
-    };
-  };
-
-  private func storeValidatedImage(validBlob : Blob) : Nat {
-    cleanupOldImages();
-    let imageId = nextImageId;
-    images.put(imageId, validBlob);
-    nextImageId += 1;
-    imageId
-  };
-
-  // 清理旧消息（当超过上限时）
-  private func cleanupOldMessages() {
-    let len = messages.size();
-    if (len >= MAX_MESSAGES) {
-      // 保留最新的 MAX_MESSAGES - 1000 条消息，删除最旧的 1000 条
-      let deleteCount : Nat = 1000;
-      if (MAX_MESSAGES >= deleteCount and len >= deleteCount) {
-        let keepCount = MAX_MESSAGES - deleteCount;
-        if (len > keepCount) {
-          let startIdx = len - keepCount;
-          messages := Array.subArray<Message>(messages, startIdx, keepCount);
-        };
-      };
-    };
-  };
-
   // 上传图片
   public shared ({ caller }) func uploadImage(imageBlob : Blob) : async Result.Result<Nat, Text> {
-    switch (validateImage(imageBlob)) {
-      case (#err(msg)) {
-        return #err(msg);
+    ignore caller;
+    switch (Image.uploadImage(imageBlob, images, nextImageId, MAX_IMAGE_SIZE, MAX_IMAGES)) {
+      case (#err(msg)) { #err(msg) };
+      case (#ok(state)) {
+        nextImageId := state.nextImageId;
+        #ok(state.imageId);
       };
-      case (#ok(validBlob)) {
-        let imageId = storeValidatedImage(validBlob);
-        #ok(imageId)
-      };
-    };
+    }
   };
 
   public shared ({ caller }) func startImageUpload(totalSize : Nat, mimeType : Text) : async Result.Result<Nat, Text> {
-    if (totalSize == 0) {
-      return #err("图片不能为空");
-    };
-    if (totalSize > MAX_IMAGE_SIZE) {
-      return #err("图片大小不能超过 " # Nat.toText(MAX_IMAGE_SIZE / 1_000_000) # "MB");
-    };
-
-    let uploadId = nextUploadId;
-    nextUploadId += 1;
-    uploadSessions.put(uploadId, newUploadSession(totalSize, mimeType));
-    #ok(uploadId)
+    ignore caller;
+    switch (Image.startImageUpload(totalSize, mimeType, uploadSessions, nextUploadId, MAX_IMAGE_SIZE)) {
+      case (#err(msg)) { #err(msg) };
+      case (#ok(state)) {
+        nextUploadId := state.nextUploadId;
+        #ok(state.uploadId);
+      };
+    }
   };
 
   public shared ({ caller }) func uploadImageChunk(uploadId : Nat, chunk : [Nat8], isFinal : Bool) : async Result.Result<?Nat, Text> {
-    switch (uploadSessions.get(uploadId)) {
-      case null {
-        return #err("上传会话不存在或已完成");
+    ignore caller;
+    switch (Image.uploadImageChunk(
+      uploadId,
+      chunk,
+      isFinal,
+      uploadSessions,
+      images,
+      nextImageId,
+      MAX_IMAGE_SIZE,
+      MAX_IMAGES,
+    )) {
+      case (#err(msg)) { #err(msg) };
+      case (#ok(state)) {
+        nextImageId := state.nextImageId;
+        #ok(state.imageId);
       };
-      case (?session) {
-        if (chunk.size() > 0) {
-          for (byte in chunk.vals()) {
-            session.buffer.add(byte);
-          };
-          session.receivedSize += chunk.size();
-        };
-
-        if (session.receivedSize > MAX_IMAGE_SIZE) {
-          uploadSessions.delete(uploadId);
-          return #err("图片大小超过限制");
-        };
-
-        if (isFinal) {
-          uploadSessions.delete(uploadId);
-          if (session.buffer.size() == 0) {
-            return #err("图片数据为空");
-          };
-
-          let bytesArray = Buffer.toArray(session.buffer);
-          let finalBlob = Blob.fromArray(bytesArray);
-          switch (validateImage(finalBlob)) {
-            case (#err(msg)) {
-              return #err(msg);
-            };
-            case (#ok(validBlob)) {
-              let imageId = storeValidatedImage(validBlob);
-              return #ok(?imageId);
-            };
-          };
-        } else {
-          return #ok(null);
-        };
-      };
-    };
+    }
   };
   
   // 获取图片
@@ -514,196 +175,53 @@ actor ICPChat {
   
   // 发送消息（带验证）
   public shared ({ caller }) func sendMessage(text : Text, imageId : ?Nat, senderId : Text, replyTo : ?Nat) : async SendMessageResult {
-    // 如果指定了图片ID，验证图片是否存在
-    switch (imageId) {
-      case (?id) {
-        switch (images.get(id)) {
-          case null {
-            return #err("图片不存在");
-          };
-          case (_) {};
-        };
-      };
-      case null {};
-    };
-    
-    // 如果指定了回复的消息ID，验证消息是否存在
-    switch (replyTo) {
-      case (?replyId) {
-        var found : Bool = false;
-        label search for (msg in messages.vals()) {
-          if (msg.id == replyId) {
-            found := true;
-            break search;
-          };
-        };
-        if (not found) {
-          return #err("回复的消息不存在");
-        };
-      };
-      case null {};
-    };
-    
-    switch (validateMessage(text, imageId)) {
+    switch (Chat.sendMessage(
+      caller,
+      text,
+      imageId,
+      senderId,
+      replyTo,
+      messages,
+      images,
+      userProfiles,
+      nextId,
+      MAX_MESSAGE_LENGTH,
+      MAX_MESSAGES,
+    )) {
       case (#err(msg)) {
-        return #err(msg);
+        #err(msg);
       };
-      case (#ok(validText)) {
-        // 从 UserProfile 获取昵称、头像、颜色（发送时的快照）
-        let (author, authorAvatar, authorColor) =
-          switch (userProfiles.get(caller)) {
-            case (?profile) {
-              // 使用用户配置的昵称、头像、颜色
-              (profile.nickname, profile.avatar, profile.color);
-            };
-            case (null) {
-              // 没有配置 Profile，昵称回退到默认规则，头像和颜色为 null
-              let defaultAuthor =
-                if (Principal.isAnonymous(caller)) {
-                  "游客";
-                } else {
-                  Principal.toText(caller);
-                };
-              (defaultAuthor, null, null);
-            };
-          };
-
-        // 如果不是匿名用户，存储 Principal，用于后续更新历史消息
-        let senderPrincipalOpt : ?Principal = 
-          if (Principal.isAnonymous(caller)) {
-            null;
-          } else {
-            ?caller;
-          };
-
-        let msg : Message = {
-          id = nextId;
-          author = author;
-          senderId = senderId;
-          senderPrincipal = senderPrincipalOpt;
-          authorAvatar = authorAvatar;
-          authorColor = authorColor;
-          text = validText;
-          timestamp = Time.now();
-          imageId = imageId;
-          replyTo = replyTo;
-        };
-
-        // 清理旧消息（如果需要）
-        cleanupOldMessages();
-
-        messages := Array.append(messages, [msg]);
-        nextId += 1;
-
-        #ok(msg)
+      case (#ok(state)) {
+        messages := state.messages;
+        nextId := state.nextId;
+        #ok(state.msg);
       };
     };
   };
 
   // 获取最近 n 条消息
   public query func getLastMessages(n : Nat) : async [Message] {
-    let len = messages.size();
-    let count = if (n == 0) { DEFAULT_PAGE_SIZE } else { Nat.min(n, len) };
-    if (count >= len) {
-      messages
-    } else {
-      Array.subArray<Message>(messages, len - count, count)
-    }
+    Chat.getLastMessages(messages, n, DEFAULT_PAGE_SIZE)
   };
 
   // 获取所有消息
   public query func getAllMessages() : async [Message] {
-    messages
+    Chat.getAllMessages(messages)
   };
 
   // 获取消息总数
   public query func getMessageCount() : async Nat {
-    messages.size()
+    Chat.getMessageCount(messages)
   };
 
   // 分页获取消息（从最新到最旧）
   public query func getMessagesPage(page : Nat, pageSize : Nat) : async MessagePage {
-    let total = messages.size();
-    let size = if (pageSize == 0) { DEFAULT_PAGE_SIZE } else { Nat.min(pageSize, 100) }; // 限制每页最多100条
-    
-    let totalPages =
-      if (total == 0 or size == 0) {
-        0
-      } else {
-        let pages = total / size;
-        if (total % size == 0) { pages } else { pages + 1 };
-      };
-
-    let currentPage = if (page == 0) { 1 } else { page };
-    
-    if (total == 0) {
-      return {
-        messages = [];
-        total = 0;
-        page = currentPage;
-        pageSize = size;
-        totalPages = 0;
-      };
-    };
-
-    // 页码超出范围
-    if (currentPage > totalPages or currentPage == 0) {
-      return {
-        messages = [];
-        total = total;
-        page = currentPage;
-        pageSize = size;
-        totalPages = totalPages;
-      };
-    };
-
-    let fromEnd =
-      if (currentPage <= 1) {
-        0
-      } else {
-        (currentPage - 1) * size;
-      };
-    
-    let startIdx =
-      if (fromEnd >= total) {
-        0
-      } else {
-        let endPos = fromEnd + size;
-        if (total >= endPos) {
-          total - endPos
-        } else {
-          0
-        };
-      };
-
-    let actualStart = startIdx;
-    let remaining =
-      if (total > actualStart) {
-        total - actualStart
-      } else {
-        0
-      };
-    let actualCount = Nat.min(size, remaining);
-    
-    let pageMessages =
-      if (actualCount == 0) {
-        []
-      } else {
-        Array.subArray<Message>(messages, actualStart, actualCount)
-      };
-
-    {
-      messages = pageMessages;
-      total = total;
-      page = currentPage;
-      pageSize = size;
-      totalPages = totalPages;
-    }
+    Chat.getMessagesPage(messages, page, pageSize, DEFAULT_PAGE_SIZE)
   };
 
   // 根据 ID 获取消息
   public query func getMessageById(id : Nat) : async ?Message {
-    Array.find<Message>(messages, func(msg : Message) : Bool { msg.id == id })
+    Chat.getMessageById(messages, id)
   };
 
   // 清空所有消息（管理员功能，可根据需要添加权限检查）
@@ -790,7 +308,7 @@ actor ICPChat {
     messages := Array.append(messages, newMessages);
     
     // 如果消息数量超过限制，清理旧消息
-    cleanupOldMessages();
+    messages := Chat.cleanupOldMessages(messages, MAX_MESSAGES);
     
     #ok(true)
   };
