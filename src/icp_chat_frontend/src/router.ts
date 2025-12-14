@@ -36,6 +36,12 @@ export const keepAliveRoutes: RouteConfig[] = [
     keepAlive: true,
     component: React.lazy(() => import('./components/Wallet')),
   },
+  {
+    id: 'private-chat-list',
+    path: '/private-chat',
+    keepAlive: true,
+    component: React.lazy(() => import('./components/PrivateChatLayout')),
+  },
 ];
 
 // 不需要 keep-alive 的页面（例如详情页）
@@ -45,6 +51,12 @@ export const normalRoutes: RouteConfig[] = [
     path: '/news/:id',
     keepAlive: false,
     component: React.lazy(() => import('./components/NewsDetail')),
+  },
+  {
+    id: 'private-chat',
+    path: '/private-chat/:otherPrincipal',
+    keepAlive: true,
+    component: React.lazy(() => import('./components/PrivateChatLayout')),
   },
 ];
 

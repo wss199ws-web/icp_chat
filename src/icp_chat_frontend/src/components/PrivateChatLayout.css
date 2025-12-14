@@ -1,0 +1,110 @@
+.private-chat-layout {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  background: #f5f5f5;
+  overflow: hidden;
+}
+
+.private-chat-layout-left {
+  width: 380px;
+  min-width: 320px;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border-right: 1px solid #e0e0e0;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.private-chat-layout-right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: white;
+  overflow: hidden;
+}
+
+.private-chat-layout-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 40px;
+  text-align: center;
+  color: #999;
+}
+
+.private-chat-layout-empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+}
+
+.empty-state-content {
+  text-align: center;
+  color: #999;
+}
+
+.empty-state-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+}
+
+.empty-state-content h3 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #666;
+}
+
+.empty-state-content p {
+  margin: 0;
+  font-size: 14px;
+  color: #999;
+}
+
+.login-button {
+  margin-top: 16px;
+  padding: 8px 16px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.login-button:hover {
+  background: #0056b3;
+}
+
+/* 响应式设计：小屏幕时左侧列表隐藏，右侧全屏 */
+@media (max-width: 768px) {
+  .private-chat-layout {
+    flex-direction: column;
+  }
+  
+  .private-chat-layout-left {
+    width: 100%;
+    max-width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #e0e0e0;
+  }
+  
+  .private-chat-layout-right {
+    width: 100%;
+    flex: 1;
+  }
+  
+  /* 如果当前有选中的聊天，隐藏左侧列表 */
+  .private-chat-layout:has(.private-chat-layout-right > .private-chat-container) .private-chat-layout-left {
+    display: none;
+  }
+}

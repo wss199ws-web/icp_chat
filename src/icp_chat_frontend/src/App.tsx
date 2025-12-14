@@ -32,7 +32,13 @@ const AppContent: React.FC = () => {
   }, []);
 
   // 判断当前是否在某个 keepAlive 路由下
-  const isActivePath = (path: string) => location.pathname === path;
+  const isActivePath = (path: string) => {
+    if (path === '/private-chat') {
+      // /private-chat 和 /private-chat/:otherPrincipal 都匹配
+      return location.pathname === '/private-chat' || location.pathname.startsWith('/private-chat/');
+    }
+    return location.pathname === path;
+  };
   const isNewsDetail = location.pathname.startsWith('/news/') && location.pathname !== '/news';
 
   // 路由变化时，标记对应页面为已访问，从而触发懒加载

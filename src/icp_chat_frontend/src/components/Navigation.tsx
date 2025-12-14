@@ -61,6 +61,12 @@ const Navigation: React.FC = () => {
           >
             💰 钱包
           </Link>
+          <Link
+            to="/private-chat"
+            className={`nav-link ${isActive('/private-chat') ? 'active' : ''}`}
+          >
+            💌 私聊
+          </Link>
           <div className="nav-auth">
             {config.network === 'ic' && (
               <button

@@ -78,6 +78,43 @@ module {
     txs : [IcpTxRecord];
     nextCursor : ?Nat;
   };
+
+  // ========== 私聊相关 ==========
+
+  // 私聊消息（与群聊消息结构类似，但属于特定会话）
+  public type PrivateMessage = {
+    id : Nat;
+    author : Text;                 // 展示用昵称（发送时的快照）
+    senderId : Text;               // 稳定的发送者ID（前端生成的 clientId）
+    senderPrincipal : ?Principal;  // 发送者的 Principal（如果是已登录用户）
+    receiverPrincipal : ?Principal; // 接收者的 Principal（如果是已登录用户）
+    authorAvatar : ?Text;          // 头像（发送时的快照）
+    authorColor : ?Text;           // 昵称颜色（发送时的快照）
+    text : Text;
+    timestamp : Int;
+    imageId : ?Nat;                // 图片ID，如果有图片则不为 null
+    replyTo : ?Nat;                // 回复的消息ID，如果有回复则不为 null
+  };
+
+  // 私聊会话信息
+  public type PrivateChatSession = {
+    sessionId : Text;              // 会话ID（两个Principal的排序组合）
+    otherPrincipal : Principal;    // 对方Principal
+    otherNickname : ?Text;         // 对方昵称（快照）
+    otherAvatar : ?Text;           // 对方头像（快照）
+    lastMessage : ?PrivateMessage; // 最后一条消息
+    lastMessageTime : Int;         // 最后消息时间
+    unreadCount : Nat;             // 未读消息数（相对于当前用户）
+  };
+
+  // 私聊消息分页
+  public type PrivateMessagePage = {
+    messages : [PrivateMessage];
+    total : Nat;
+    page : Nat;
+    pageSize : Nat;
+    totalPages : Nat;
+  };
 }
 
 

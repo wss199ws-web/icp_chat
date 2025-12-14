@@ -16,6 +16,7 @@ import Types "./Types";
 import Wallet "./Wallet";
 import Chat "./Chat";
 import Image "./Image";
+import PrivateChat "./PrivateChat";
 
 // 去掉 persistent / transient，用普通 actor 即可
 actor ICPChat {
@@ -35,11 +36,21 @@ actor ICPChat {
   // 用户资料类型（方案 B：基于 Principal 的个人信息配置）
   public type UserProfile = Types.UserProfile;
 
+  // 私聊相关类型
+  public type PrivateMessage = Types.PrivateMessage;
+  public type PrivateChatSession = Types.PrivateChatSession;
+  public type PrivateMessagePage = Types.PrivateMessagePage;
+  public type SendPrivateMessageResult = Result.Result<PrivateMessage, Text>;
+
   // 持久化状态用 stable 即可
   stable var messages : [Message] = [];
   stable var nextId : Nat = 0;
   stable var nextImageId : Nat = 0;
   stable var nextUploadId : Nat = 0;
+  
+  // 私聊消息存储
+  stable var privateMessages : [PrivateMessage] = [];
+  stable var nextPrivateMessageId : Nat = 0;
   
   // 图片存储：使用 HashMap 存储图片数据
   // 注意：HashMap 不能直接 stable，需要序列化/反序列化
@@ -97,7 +108,7 @@ actor ICPChat {
     userKeysStable := userKeysToArray();
     groupKeysStable := groupKeysToArray();
     userProfilesStable := userProfilesToArray();
-    // 注意：messages 是 stable var，会自动持久化，不需要手动处理
+    // 注意：messages 和 privateMessages 是 stable var，会自动持久化，不需要手动处理
   };
   
   // 系统升级时恢复数据
@@ -587,6 +598,106 @@ actor ICPChat {
     //   return null;
     // };
     userProfiles.get(caller)
+  };
+
+  // ========== 私聊相关 API ==========
+
+  // 发送私聊消息
+  public shared ({ caller }) func sendPrivateMessage(
+    receiverPrincipal : Principal,
+    text : Text,
+    imageId : ?Nat,
+    senderId : Text,
+    replyTo : ?Nat,
+  ) : async SendPrivateMessageResult {
+    // 只允许已登录用户发送私聊消息
+    if (Principal.isAnonymous(caller)) {
+      return #err("请先登录以发送私聊消息");
+    };
+
+    switch (PrivateChat.sendPrivateMessage(
+      caller,
+      receiverPrincipal,
+      text,
+      imageId,
+      senderId,
+      replyTo,
+      privateMessages,
+      images,
+      userProfiles,
+      nextPrivateMessageId,
+      MAX_MESSAGE_LENGTH,
+      MAX_MESSAGES,
+    )) {
+      case (#err(msg)) {
+        #err(msg);
+      };
+      case (#ok(state)) {
+        privateMessages := state.messages;
+        nextPrivateMessageId := state.nextId;
+        #ok(state.msg);
+      };
+    };
+  };
+
+  // 获取私聊会话列表
+  public shared query ({ caller }) func getPrivateChatSessions() : async [PrivateChatSession] {
+    // 只允许已登录用户获取会话列表
+    if (Principal.isAnonymous(caller)) {
+      return [];
+    };
+    PrivateChat.getUserSessions(privateMessages, caller, userProfiles)
+  };
+
+  // 获取私聊会话的消息（最近n条）
+  public shared query ({ caller }) func getLastPrivateMessages(
+    otherPrincipal : Principal,
+    n : Nat,
+  ) : async [PrivateMessage] {
+    if (Principal.isAnonymous(caller)) {
+      return [];
+    };
+    let sessionId = PrivateChat.generateSessionId(caller, otherPrincipal);
+    PrivateChat.getLastPrivateMessages(
+      privateMessages,
+      sessionId,
+      caller,
+      otherPrincipal,
+      n,
+      DEFAULT_PAGE_SIZE,
+    )
+  };
+
+  // 分页获取私聊消息
+  public shared query ({ caller }) func getPrivateMessagesPage(
+    otherPrincipal : Principal,
+    page : Nat,
+    pageSize : Nat,
+  ) : async PrivateMessagePage {
+    if (Principal.isAnonymous(caller)) {
+      return {
+        messages = [];
+        total = 0;
+        page = 0;
+        pageSize = 0;
+        totalPages = 0;
+      };
+    };
+    let sessionId = PrivateChat.generateSessionId(caller, otherPrincipal);
+    PrivateChat.getPrivateMessagesPage(
+      privateMessages,
+      sessionId,
+      caller,
+      otherPrincipal,
+      page,
+      pageSize,
+      DEFAULT_PAGE_SIZE,
+    )
+  };
+
+  // 根据ID获取私聊消息
+  public shared query ({ caller }) func getPrivateMessageById(id : Nat) : async ?PrivateMessage {
+    PrivateChat.getPrivateMessageById(privateMessages, id, caller)
   };
 
 }
