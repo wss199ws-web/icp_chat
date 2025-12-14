@@ -16,6 +16,7 @@ const UserProfile: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [userPrincipal, setUserPrincipal] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -25,6 +26,13 @@ const UserProfile: React.FC = () => {
         const authed = await authService.isAuthenticated();
         if (!mounted) return;
         setIsAuthenticated(authed);
+        
+        // 获取用户 Principal (UID)
+        if (authed) {
+          const principal = await authService.getPrincipalText();
+          if (!mounted) return;
+          setUserPrincipal(principal);
+        }
         
         // 加载用户资料
         const data = await userProfileService.getProfile();
@@ -264,19 +272,35 @@ const UserProfile: React.FC = () => {
               </span>
             </label>
 
-            <label className="key-management-label">
-              <span className="field-label">昵称颜色</span>
-              <input
-                className="key-management-input"
-                type="text"
-                value={profile.color ?? ''}
-                onChange={handleChange('color')}
-                placeholder="#ff6699 或 css 颜色值"
-                maxLength={50}
-              />
-              <span className="field-desc">用于列表中昵称展示，例如：#ff6699、rgb(255, 100, 150)。</span>
-            </label>
-          </div>
+          <label className="key-management-label">
+            <span className="field-label">昵称颜色</span>
+            <input
+              className="key-management-input"
+              type="text"
+              value={profile.color ?? ''}
+              onChange={handleChange('color')}
+              placeholder="#ff6699 或 css 颜色值"
+              maxLength={50}
+            />
+            <span className="field-desc">用于列表中昵称展示，例如：#ff6699、rgb(255, 100, 150)。</span>
+          </label>
+
+          <label className="key-management-label">
+            <span className="field-label">用户UID</span>
+            <div style={{ 
+              padding: '12px', 
+              background: '#f5f5f5', 
+              borderRadius: '4px',
+              fontFamily: 'monospace',
+              fontSize: '13px',
+              wordBreak: 'break-all',
+              color: '#666'
+            }}>
+              {userPrincipal || (isAuthenticated ? '加载中...' : '请先登录')}
+            </div>
+            <span className="field-desc">这是你的唯一标识符（Principal），其他人可以通过此UID查找并联系你。</span>
+          </label>
+        </div>
 
           <label className="key-management-label">
             <span className="field-label">个性签名</span>

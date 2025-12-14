@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { privateChatService, PrivateChatSession } from '../services/privateChatService';
 import { authService } from '../services/authService';
+import UserSearchDialog from './UserSearchDialog';
 import './PrivateChatList.css';
 
 interface PrivateChatListProps {
@@ -21,6 +22,7 @@ const PrivateChatList: React.FC<PrivateChatListProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [localSearchQuery, setLocalSearchQuery] = useState('');
+  const [showUserSearchDialog, setShowUserSearchDialog] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -84,6 +86,17 @@ const PrivateChatList: React.FC<PrivateChatListProps> = ({
       onSessionSelect(otherPrincipal);
     } else {
       navigate(`/private-chat/${encodeURIComponent(otherPrincipal)}`);
+    }
+  };
+
+  const handleUserSearch = (principal: string) => {
+    // 关闭对话框
+    setShowUserSearchDialog(false);
+    // 导航到该用户的私聊页面
+    if (onSessionSelect) {
+      onSessionSelect(principal);
+    } else {
+      navigate(`/private-chat/${encodeURIComponent(principal)}`);
     }
   };
 
@@ -153,6 +166,10 @@ const PrivateChatList: React.FC<PrivateChatListProps> = ({
         <button
           className="header-menu-button"
           title="更多选项"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowUserSearchDialog(true);
+          }}
         >
           ⋮
         </button>
@@ -236,6 +253,12 @@ const PrivateChatList: React.FC<PrivateChatListProps> = ({
           })}
         </div>
       )}
+
+      <UserSearchDialog
+        isOpen={showUserSearchDialog}
+        onClose={() => setShowUserSearchDialog(false)}
+        onSearch={handleUserSearch}
+      />
     </div>
   );
 };
